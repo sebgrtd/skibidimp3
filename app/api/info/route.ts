@@ -42,7 +42,7 @@ async function fetchInfoWithFallback(trimmedUrl: string): Promise<string> {
   } catch (err1: any) {
     console.warn("Info attempt 1 failed:", err1.message?.split("\n")[0]);
 
-    // Attempt 2: tv_embedded client (bypasses age restrictions)
+    // Attempt 2: tv_embedded client (bypasses some age restrictions)
     try {
       return await runYtDlp([
         "--extractor-args", "youtube:player_client=tv_embedded,android,web",
@@ -55,18 +55,48 @@ async function fetchInfoWithFallback(trimmedUrl: string): Promise<string> {
       console.warn("Info attempt 2 failed:", err2.message?.split("\n")[0]);
 
       // Attempt 3: mweb fallback
-      return await runYtDlp([
-        "--extractor-args", "youtube:player_client=mweb,tv_embedded",
-        "--flat-playlist",
-        "--dump-json",
-        "--no-warnings",
-        trimmedUrl
-      ]);
+      try {
+        return await runYtDlp([
+          "--extractor-args", "youtube:player_client=mweb,tv_embedded",
+          "--flat-playlist",
+          "--dump-json",
+          "--no-warnings",
+          trimmedUrl
+        ]);
+      } catch (err3: any) {
+        console.warn("Info attempt 3 failed:", err3.message?.split("\n")[0]);
+        throw err3;
+      }
     }
   }
 }
 
+// Fallback for age-restricted or bot-blocked YouTube videos using public oEmbed API
+async function fetchYouTubeViaOEmbed(trimmedUrl: string): Promise<{ title: string; artist: string; thumbnail: string | null; videoId: string | null }| null> {
+  try {
+    const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(trimmedUrl)}&format=json`;
+    const res = await fetch(oEmbedUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; bot/1.0)" }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const videoIdMatch = trimmedUrl.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    return {
+      title: data.title || "Vidéo YouTube",
+      artist: data.author_name || "YouTube",
+      thumbnail: data.thumbnail_url || null,
+      videoId: videoIdMatch?.[1] || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+
 export async function POST(req: NextRequest) {
+  let trimmedUrl = "";
+  let platform: "youtube" | "spotify" | "soundcloud" | "generic" = "generic";
+
   try {
     const { url } = await req.json();
 
@@ -74,8 +104,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "URL invalide ou manquante." }, { status: 400 });
     }
 
-    const trimmedUrl = url.trim();
-    let platform: "youtube" | "spotify" | "soundcloud" | "generic" = "generic";
+    trimmedUrl = url.trim();
 
     if (trimmedUrl.includes("youtube.com") || trimmedUrl.includes("youtu.be")) {
       platform = "youtube";
@@ -237,6 +266,30 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error("Erreur /api/info:", error);
+
+    // For YouTube URLs: try oEmbed as last resort (works for age-restricted videos)
+    if (trimmedUrl && (platform === "youtube")) {
+      console.log("Trying YouTube oEmbed fallback for:", trimmedUrl);
+      const oEmbed = await fetchYouTubeViaOEmbed(trimmedUrl);
+      if (oEmbed) {
+        console.log("oEmbed fallback success:", oEmbed.title);
+        return NextResponse.json({
+          platform: "youtube",
+          isPlaylist: false,
+          id: oEmbed.videoId,
+          title: oEmbed.title,
+          artist: oEmbed.artist,
+          duration: 0,
+          thumbnail: oEmbed.thumbnail,
+          url: trimmedUrl,
+          originalUrl: trimmedUrl,
+          views: 0,
+          uploadDate: null,
+          ageRestricted: true,
+        });
+      }
+    }
+
     return NextResponse.json(
       { error: "Impossible de récupérer les informations pour ce lien. Assurez-vous que l'URL est publique et valide." },
       { status: 500 }
