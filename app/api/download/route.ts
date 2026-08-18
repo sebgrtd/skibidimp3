@@ -6,7 +6,6 @@ import os from "os";
 import NodeID3 from "node-id3";
 
 const PYTHON_PATH = process.env.PYTHON_PATH || (process.platform === "win32" ? `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe` : "python3");
-const NODE_PATH = process.env.NODE_PATH || (process.platform === "win32" ? `C:\\Program Files\\nodejs\\node.exe` : "node");
 
 async function extractAudioStream(downloadUrl: string, rawTemplate: string): Promise<string> {
   const isModule = PYTHON_PATH.includes("python");
@@ -114,28 +113,18 @@ export async function POST(req: NextRequest) {
       downloadedRaw = await extractAudioStream(downloadTargetUrl, rawTemplate);
       tmpFiles.push(downloadedRaw);
     } catch (extractErr: any) {
-      // Fallback 1: If direct URL extraction failed on YouTube, try YouTube search
       const searchTitle = metadata.title || "music";
       const searchArtist = metadata.artist || "";
       const searchTerms = `${searchArtist} ${searchTitle}`.trim();
 
-      if (!downloadTargetUrl.startsWith("ytsearch1:")) {
-        const fallbackSearch = `ytsearch1:${searchTerms} audio`.trim();
-        console.log("Tentative de secours via recherche YouTube:", fallbackSearch);
-        try {
-          downloadedRaw = await extractAudioStream(fallbackSearch, rawTemplate);
-          tmpFiles.push(downloadedRaw);
-        } catch (searchErr: any) {
-          // Fallback 2: Try SoundCloud search fallback
-          console.log("Tentative de secours via SoundCloud search:", searchTerms);
-          downloadedRaw = await extractAudioStream(`scsearch1:${searchTerms}`, rawTemplate);
-          tmpFiles.push(downloadedRaw);
-        }
-      } else {
-        // Was already a ytsearch1 query, try SoundCloud search as ultimate fallback
-        console.log("Tentative de secours ultime via SoundCloud search:", searchTerms);
-        downloadedRaw = await extractAudioStream(`scsearch1:${searchTerms}`, rawTemplate);
+      // Ultimate fallback: Use SoundCloud scsearch5 which automatically skips DRM previews
+      console.log("Tentative de secours ultime via SoundCloud scsearch5:", searchTerms);
+      try {
+        downloadedRaw = await extractAudioStream(`scsearch5:${searchTerms}`, rawTemplate);
         tmpFiles.push(downloadedRaw);
+      } catch (scErr: any) {
+        console.error("SoundCloud fallback failed:", scErr.message);
+        throw extractErr;
       }
     }
 
