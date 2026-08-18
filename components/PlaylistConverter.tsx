@@ -39,7 +39,7 @@ interface PlaylistInfo {
 interface PlaylistConverterProps {
   playlist: PlaylistInfo;
   onReset: () => void;
-  onAddToHistory?: (item: any) => void;
+  onAddToHistory?: (item?: any) => void;
 }
 
 export default function PlaylistConverter({ playlist, onReset, onAddToHistory }: PlaylistConverterProps) {
@@ -52,6 +52,7 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
   const [zipProgressPercent, setZipProgressPercent] = useState(0);
   const [progressMsg, setProgressMsg] = useState("");
   const [downloadingTrackId, setDownloadingTrackId] = useState<string | null>(null);
+  const [trackProgress, setTrackProgress] = useState<{ [id: string]: { percent: number; status: string } }>({});
 
   // Settings
   const [format, setFormat] = useState("mp3");
@@ -78,6 +79,24 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
   const handleDownloadSingleTrack = async (track: PlaylistTrack) => {
     const trackId = track.id || String(track.index);
     setDownloadingTrackId(trackId);
+    setTrackProgress((prev) => ({
+      ...prev,
+      [trackId]: { percent: 10, status: "Connexion..." },
+    }));
+
+    const trackInterval = setInterval(() => {
+      setTrackProgress((prev) => {
+        const current = prev[trackId] || { percent: 10, status: "Connexion..." };
+        if (current.percent < 40) {
+          return { ...prev, [trackId]: { percent: current.percent + 6, status: "Connexion..." } };
+        } else if (current.percent < 80) {
+          return { ...prev, [trackId]: { percent: current.percent + 4, status: "Conversion 320k..." } };
+        } else if (current.percent < 95) {
+          return { ...prev, [trackId]: { percent: current.percent + 1.5, status: "Finalisation..." } };
+        }
+        return prev;
+      });
+    }, 400);
 
     try {
       const res = await fetch("/api/download", {
@@ -102,6 +121,12 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
         throw new Error(errJson.error || "Échec du téléchargement.");
       }
 
+      clearInterval(trackInterval);
+      setTrackProgress((prev) => ({
+        ...prev,
+        [trackId]: { percent: 100, status: "Prêt !" },
+      }));
+
       const blob = await res.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -114,22 +139,38 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
       a.remove();
       window.URL.revokeObjectURL(blobUrl);
 
-      if (onAddToHistory) {
-        onAddToHistory({
-          id: Date.now().toString(),
-          title: track.title,
-          artist: track.artist || playlist.artist || playlist.title,
-          thumbnail: track.thumbnail || playlist.thumbnail,
-          format,
-          bitrate,
-          date: new Date().toLocaleDateString(),
-          url: track.url,
+      // Save to user account history
+      try {
+        await fetch("/api/user/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: track.title,
+            artist: track.artist || playlist.artist || playlist.title,
+            thumbnail: track.thumbnail || playlist.thumbnail,
+            format,
+            bitrate,
+            url: track.url || `https://open.spotify.com/track/${track.id}`,
+          }),
         });
+      } catch {}
+
+      if (onAddToHistory) {
+        onAddToHistory();
       }
+
+      await new Promise((r) => setTimeout(r, 800));
     } catch (err: any) {
+      clearInterval(trackInterval);
       alert("Erreur lors du téléchargement de la piste : " + err.message);
     } finally {
+      clearInterval(trackInterval);
       setDownloadingTrackId(null);
+      setTrackProgress((prev) => {
+        const copy = { ...prev };
+        delete copy[trackId];
+        return copy;
+      });
     }
   };
 
@@ -193,6 +234,30 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
       a.click();
       a.remove();
       window.URL.revokeObjectURL(blobUrl);
+
+      // Save all tracks to user history
+      try {
+        await Promise.all(
+          selectedTracks.map((t) =>
+            fetch("/api/user/history", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: t.title,
+                artist: t.artist || playlist.artist || playlist.title,
+                thumbnail: t.thumbnail || playlist.thumbnail,
+                format,
+                bitrate,
+                url: t.url || `https://open.spotify.com/track/${t.id}`,
+              }),
+            })
+          )
+        );
+      } catch {}
+
+      if (onAddToHistory) {
+        onAddToHistory();
+      }
 
       await new Promise((r) => setTimeout(r, 1000));
     } catch (err: any) {
@@ -334,52 +399,82 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
             const isSelected = selectedTrackIds.includes(trackId);
             const isDownloadingThis = downloadingTrackId === trackId;
 
+            const progress = trackProgress[trackId];
+
             return (
               <div
                 key={trackId}
-                className={`flex items-center gap-4 px-5 py-3.5 transition-colors ${
-                  isSelected ? "bg-purple-950/20" : "hover:bg-slate-800/40"
+                className={`flex flex-col px-5 py-3.5 transition-colors ${
+                  isDownloadingThis ? "bg-purple-950/40 border-l-2 border-purple-500" : isSelected ? "bg-purple-950/20" : "hover:bg-slate-800/40"
                 }`}
               >
-                <button
-                  type="button"
-                  onClick={() => toggleTrack(trackId)}
-                  className="text-slate-400 hover:text-purple-400 shrink-0"
-                >
-                  {isSelected ? (
-                    <CheckSquare className="h-5 w-5 text-purple-400" />
-                  ) : (
-                    <Square className="h-5 w-5 text-slate-600" />
-                  )}
-                </button>
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() => toggleTrack(trackId)}
+                    className="text-slate-400 hover:text-purple-400 shrink-0"
+                  >
+                    {isSelected ? (
+                      <CheckSquare className="h-5 w-5 text-purple-400" />
+                    ) : (
+                      <Square className="h-5 w-5 text-slate-600" />
+                    )}
+                  </button>
 
-                <span className="w-6 text-center text-xs font-mono text-slate-500 shrink-0">
-                  {idx + 1}
-                </span>
+                  <span className="w-6 text-center text-xs font-mono text-slate-500 shrink-0">
+                    {idx + 1}
+                  </span>
 
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-semibold text-white truncate">{track.title}</h4>
-                  <p className="text-xs text-slate-400 truncate">{track.artist || playlist.title}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-semibold text-white truncate">{track.title}</h4>
+                      {isDownloadingThis && progress && (
+                        <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-mono font-bold text-emerald-400 shrink-0 animate-pulse">
+                          {Math.round(progress.percent)}% - {progress.status}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400 truncate">{track.artist || playlist.title}</p>
+                  </div>
+
+                  {track.duration && !isDownloadingThis ? (
+                    <span className="text-xs font-mono text-slate-400 shrink-0">
+                      {formatTime(track.duration)}
+                    </span>
+                  ) : null}
+
+                  <button
+                    onClick={() => handleDownloadSingleTrack(track)}
+                    disabled={isDownloadingThis}
+                    className={`rounded-lg border p-2 shrink-0 transition-colors ${
+                      isDownloadingThis
+                        ? "border-purple-500/50 bg-purple-600/30 text-purple-300 font-mono text-xs font-bold px-3"
+                        : "border-slate-700 bg-slate-800 text-slate-300 hover:border-purple-500 hover:bg-purple-600 hover:text-white"
+                    }`}
+                    title="Télécharger cette piste seule"
+                  >
+                    {isDownloadingThis ? (
+                      <div className="flex items-center gap-1.5">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-400" />
+                        <span>{progress ? `${Math.round(progress.percent)}%` : "..."}</span>
+                      </div>
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
 
-                {track.duration ? (
-                  <span className="text-xs font-mono text-slate-400 shrink-0">
-                    {formatTime(track.duration)}
-                  </span>
-                ) : null}
-
-                <button
-                  onClick={() => handleDownloadSingleTrack(track)}
-                  disabled={isDownloadingThis}
-                  className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-300 hover:border-purple-500 hover:bg-purple-600 hover:text-white shrink-0 transition-colors"
-                  title="Télécharger cette piste seule"
-                >
-                  {isDownloadingThis ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
-                  ) : (
-                    <Download className="h-4 w-4" />
-                  )}
-                </button>
+                {/* Inline track progress bar */}
+                {isDownloadingThis && progress && (
+                  <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden mt-2.5 border border-purple-500/30">
+                    <div 
+                      className="h-full rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-emerald-400 transition-all duration-300 relative overflow-hidden"
+                      style={{ width: `${Math.min(100, Math.max(5, progress.percent))}%` }}
+                    >
+                      <div className="absolute inset-0 bg-white/30 animate-pulse" />
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

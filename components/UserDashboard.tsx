@@ -38,6 +38,7 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
   const [zipProgressPercent, setZipProgressPercent] = useState(0);
   const [progressMsg, setProgressMsg] = useState("");
   const [downloadingSingleId, setDownloadingSingleId] = useState<string | null>(null);
+  const [singleProgress, setSingleProgress] = useState<{ [id: string]: { percent: number; status: string } }>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
 
@@ -136,6 +137,25 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
   // Download 1 track from history
   const handleDownloadSingle = async (item: SyncedHistoryItem) => {
     setDownloadingSingleId(item.id);
+    setSingleProgress((prev) => ({
+      ...prev,
+      [item.id]: { percent: 10, status: "Connexion..." },
+    }));
+
+    const singleInterval = setInterval(() => {
+      setSingleProgress((prev) => {
+        const current = prev[item.id] || { percent: 10, status: "Connexion..." };
+        if (current.percent < 40) {
+          return { ...prev, [item.id]: { percent: current.percent + 6, status: "Connexion..." } };
+        } else if (current.percent < 80) {
+          return { ...prev, [item.id]: { percent: current.percent + 4, status: "Conversion 320k..." } };
+        } else if (current.percent < 95) {
+          return { ...prev, [item.id]: { percent: current.percent + 1.5, status: "Finalisation..." } };
+        }
+        return prev;
+      });
+    }, 400);
+
     try {
       const res = await fetch("/api/download", {
         method: "POST",
@@ -147,11 +167,21 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
           metadata: {
             title: item.title,
             artist: item.artist,
+            coverUrl: item.thumbnail,
           },
         }),
       });
 
-      if (!res.ok) throw new Error("Échec de la conversion.");
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || "Échec de la conversion.");
+      }
+
+      clearInterval(singleInterval);
+      setSingleProgress((prev) => ({
+        ...prev,
+        [item.id]: { percent: 100, status: "Prêt !" },
+      }));
 
       const blob = await res.blob();
       const blobUrl = window.URL.createObjectURL(blob);
@@ -164,10 +194,19 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
       a.click();
       a.remove();
       window.URL.revokeObjectURL(blobUrl);
+
+      await new Promise((r) => setTimeout(r, 800));
     } catch (err: any) {
+      clearInterval(singleInterval);
       alert("Erreur lors du téléchargement : " + err.message);
     } finally {
+      clearInterval(singleInterval);
       setDownloadingSingleId(null);
+      setSingleProgress((prev) => {
+        const copy = { ...prev };
+        delete copy[item.id];
+        return copy;
+      });
     }
   };
 
@@ -403,72 +442,101 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
               const isSelected = selectedIds.includes(item.id);
               const isDownloadingThis = downloadingSingleId === item.id;
               const isDeletingThis = deletingId === item.id;
+              const progress = singleProgress[item.id];
 
               return (
                 <div
                   key={item.id}
-                  className={`flex items-center gap-3 sm:gap-4 p-3.5 sm:px-5 sm:py-3.5 transition-colors ${
-                    isSelected ? "bg-purple-950/20" : "hover:bg-slate-800/40"
+                  className={`flex flex-col p-3.5 sm:px-5 sm:py-3.5 transition-colors ${
+                    isDownloadingThis ? "bg-purple-950/40 border-l-2 border-purple-500" : isSelected ? "bg-purple-950/20" : "hover:bg-slate-800/40"
                   }`}
                 >
-                  <button
-                    type="button"
-                    onClick={() => toggleSelect(item.id)}
-                    className="text-slate-400 hover:text-purple-400 shrink-0"
-                  >
-                    {isSelected ? (
-                      <CheckSquare className="h-5 w-5 text-purple-400" />
-                    ) : (
-                      <Square className="h-5 w-5 text-slate-600" />
-                    )}
-                  </button>
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <button
+                      type="button"
+                      onClick={() => toggleSelect(item.id)}
+                      className="text-slate-400 hover:text-purple-400 shrink-0"
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="h-5 w-5 text-purple-400" />
+                      ) : (
+                        <Square className="h-5 w-5 text-slate-600" />
+                      )}
+                    </button>
 
-                  <div className="h-10 w-10 shrink-0 rounded-lg overflow-hidden bg-slate-950 border border-slate-800">
-                    {item.thumbnail ? (
-                      <img src={item.thumbnail} alt={item.title} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center text-slate-500">
-                        <Music className="h-5 w-5" />
+                    <div className="h-10 w-10 shrink-0 rounded-lg overflow-hidden bg-slate-950 border border-slate-800">
+                      {item.thumbnail ? (
+                        <img src={item.thumbnail} alt={item.title} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center text-slate-500">
+                          <Music className="h-5 w-5" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs sm:text-sm font-bold text-white truncate">{item.title}</h4>
+                        {isDownloadingThis && progress && (
+                          <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-mono font-bold text-emerald-400 shrink-0 animate-pulse">
+                            {Math.round(progress.percent)}% - {progress.status}
+                          </span>
+                        )}
                       </div>
-                    )}
+                      <p className="text-[11px] sm:text-xs text-slate-400 truncate">{item.artist}</p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                      <span className="hidden sm:inline-block rounded-md border border-purple-500/30 bg-purple-500/10 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-mono font-bold text-purple-300">
+                        {item.format.toUpperCase()} {item.bitrate}
+                      </span>
+
+                      <button
+                        onClick={() => handleDownloadSingle(item)}
+                        disabled={isDownloadingThis || isDeletingThis}
+                        className={`rounded-lg border p-2 shrink-0 transition-colors disabled:opacity-50 ${
+                          isDownloadingThis
+                            ? "border-purple-500/50 bg-purple-600/30 text-purple-300 font-mono text-xs font-bold px-3"
+                            : "border-slate-700 bg-slate-800 text-slate-300 hover:border-purple-500 hover:bg-purple-600 hover:text-white"
+                        }`}
+                        title="Re-télécharger ce morceau"
+                      >
+                        {isDownloadingThis ? (
+                          <div className="flex items-center gap-1.5">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-400" />
+                            <span>{progress ? `${Math.round(progress.percent)}%` : "..."}</span>
+                          </div>
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteSingle(item.id)}
+                        disabled={isDeletingThis || isDownloadingThis}
+                        className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-400 hover:border-rose-500 hover:bg-rose-500/20 hover:text-rose-400 transition-colors disabled:opacity-50"
+                        title="Supprimer de l'historique"
+                      >
+                        {isDeletingThis ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-rose-400" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-xs sm:text-sm font-bold text-white truncate">{item.title}</h4>
-                    <p className="text-[11px] sm:text-xs text-slate-400 truncate">{item.artist}</p>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                    <span className="hidden sm:inline-block rounded-md border border-purple-500/30 bg-purple-500/10 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-mono font-bold text-purple-300">
-                      {item.format.toUpperCase()} {item.bitrate}
-                    </span>
-
-                    <button
-                      onClick={() => handleDownloadSingle(item)}
-                      disabled={isDownloadingThis || isDeletingThis}
-                      className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-300 hover:border-purple-500 hover:bg-purple-600 hover:text-white transition-colors disabled:opacity-50"
-                      title="Re-télécharger ce morceau"
-                    >
-                      {isDownloadingThis ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
-                      ) : (
-                        <Download className="h-4 w-4" />
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteSingle(item.id)}
-                      disabled={isDeletingThis || isDownloadingThis}
-                      className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-400 hover:border-rose-500 hover:bg-rose-500/20 hover:text-rose-400 transition-colors disabled:opacity-50"
-                      title="Supprimer de l'historique"
-                    >
-                      {isDeletingThis ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-rose-400" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
+                  {/* Inline progress bar */}
+                  {isDownloadingThis && progress && (
+                    <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden mt-2.5 border border-purple-500/30">
+                      <div 
+                        className="h-full rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-emerald-400 transition-all duration-300 relative overflow-hidden"
+                        style={{ width: `${Math.min(100, Math.max(5, progress.percent))}%` }}
+                      >
+                        <div className="absolute inset-0 bg-white/30 animate-pulse" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

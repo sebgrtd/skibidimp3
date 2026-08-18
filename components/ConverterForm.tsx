@@ -33,7 +33,7 @@ interface MediaInfo {
 
 interface ConverterFormProps {
   onPlaylistDetected?: (info: MediaInfo) => void;
-  onAddToHistory?: (item: any) => void;
+  onAddToHistory?: (item?: any) => void;
 }
 
 export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: ConverterFormProps) {
