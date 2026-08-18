@@ -6,8 +6,8 @@ import path from "path";
 import os from "os";
 import archiver from "archiver";
 
-const PYTHON_PATH = `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe`;
-const NODE_PATH = `C:\\Program Files\\nodejs\\node.exe`;
+const PYTHON_PATH = process.env.PYTHON_PATH || (process.platform === "win32" ? `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe` : "python3");
+const NODE_PATH = process.env.NODE_PATH || (process.platform === "win32" ? `C:\\Program Files\\nodejs\\node.exe` : "node");
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get("skibidi_session")?.value || req.headers.get("authorization")?.replace("Bearer ", "");
@@ -45,6 +45,10 @@ export async function POST(req: NextRequest) {
     const outputZipStream = fs.createWriteStream(zipPath);
     archive.pipe(outputZipStream);
 
+    const isModule = PYTHON_PATH.includes("python");
+    const ytDlpCommand = isModule ? PYTHON_PATH : "yt-dlp";
+    const ytDlpBaseArgs = isModule ? ["-m", "yt_dlp"] : [];
+
     // Limit to 20 tracks max per batch ZIP download
     const batch = tracksToProcess.slice(0, 20);
 
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
         let downloadedRaw = "";
         await new Promise<void>((resolve, reject) => {
           const args = [
-            "-m", "yt_dlp",
+            ...ytDlpBaseArgs,
             "--js-runtimes", `node:${NODE_PATH}`,
             "--extractor-args", "youtube:player_client=android,web",
             "-f", "ba/b",
@@ -70,7 +74,7 @@ export async function POST(req: NextRequest) {
             "--no-playlist",
             track.url
           ];
-          const proc = spawn(PYTHON_PATH, args);
+          const proc = spawn(ytDlpCommand, args);
 
           proc.on("close", (code) => {
             const dirFiles = fs.readdirSync(os.tmpdir());

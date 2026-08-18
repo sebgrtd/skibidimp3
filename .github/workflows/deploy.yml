@@ -1,0 +1,30 @@
+name: Auto Deploy Super Skibidi MP3 🚽⚡
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH and Deploy Docker Container
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: alexandre-pruvost.fr
+          username: root
+          password: ${{ secrets.VPS_PASSWORD }}
+          script: |
+            set -e
+            mkdir -p /opt/skibidimp3
+            if [ ! -d "/opt/skibidimp3/.git" ]; then
+              git clone https://github.com/sebgrtd/skibidimp3.git /opt/skibidimp3
+            fi
+            cd /opt/skibidimp3
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose down || true
+            docker compose up --build -d
+            echo "🚀 Déploiement Docker terminé avec succès !"

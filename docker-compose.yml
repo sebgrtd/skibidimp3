@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  skibidi-mp3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: skibidi-mp3-app
+    restart: always
+    ports:
+      - "3030:3030"
+    environment:
+      - PORT=3030
+      - NODE_ENV=production
+      - PYTHON_PATH=/opt/venv/bin/python3
+      - NODE_PATH=/usr/local/bin/node
+    volumes:
+      - skibidi-data:/app/.data
+
+volumes:
+  skibidi-data:

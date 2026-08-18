@@ -5,39 +5,34 @@ import path from "path";
 import os from "os";
 import archiver from "archiver";
 
-const PYTHON_PATH = `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe`;
-const NODE_PATH = `C:\\Program Files\\nodejs\\node.exe`;
+const PYTHON_PATH = process.env.PYTHON_PATH || (process.platform === "win32" ? `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe` : "python3");
+const NODE_PATH = process.env.NODE_PATH || (process.platform === "win32" ? `C:\\Program Files\\nodejs\\node.exe` : "node");
 
 export async function POST(req: NextRequest) {
   const tmpFiles: string[] = [];
 
   try {
     const body = await req.json();
-    const {
-      tracks = [],
-      format = "mp3",
-      bitrate = "320k",
-      volumeBoost = "1.0",
-      normalize = false,
-      zipName = "playlist_boosted.zip",
-    } = body;
+    const { tracks, format = "mp3", bitrate = "320k", playlistName = "SuperSkibidi_Playlist" } = body;
 
     if (!Array.isArray(tracks) || tracks.length === 0) {
-      return NextResponse.json({ error: "Aucune piste sélectionnée pour le ZIP." }, { status: 400 });
+      return NextResponse.json({ error: "Aucune piste fournie." }, { status: 400 });
     }
 
     const uniqueId = Date.now() + "_" + Math.random().toString(36).substring(2, 9);
-    const zipPath = path.join(os.tmpdir(), `bundle_${uniqueId}.zip`);
+    const zipPath = path.join(os.tmpdir(), `playlist_${uniqueId}.zip`);
     tmpFiles.push(zipPath);
 
     const archive = archiver("zip", { zlib: { level: 6 } });
     const outputZipStream = fs.createWriteStream(zipPath);
     archive.pipe(outputZipStream);
 
-    const tracksToProcess = tracks.slice(0, 20);
+    const isModule = PYTHON_PATH.includes("python");
+    const ytDlpCommand = isModule ? PYTHON_PATH : "yt-dlp";
+    const ytDlpBaseArgs = isModule ? ["-m", "yt_dlp"] : [];
 
-    for (let i = 0; i < tracksToProcess.length; i++) {
-      const track = tracksToProcess[i];
+    for (let i = 0; i < tracks.length; i++) {
+      const track = tracks[i];
       const trackId = `${uniqueId}_${i}`;
       const rawPattern = `raw_${trackId}`;
       const rawTemplate = path.join(os.tmpdir(), `${rawPattern}.%(ext)s`);
@@ -48,16 +43,16 @@ export async function POST(req: NextRequest) {
         let downloadedRaw = "";
         await new Promise<void>((resolve, reject) => {
           const args = [
-            "-m", "yt_dlp",
+            ...ytDlpBaseArgs,
             "--js-runtimes", `node:${NODE_PATH}`,
             "--extractor-args", "youtube:player_client=android,web",
             "-f", "ba/b",
             "-x",
             "-o", rawTemplate,
             "--no-playlist",
-            track.url
+            track.url,
           ];
-          const proc = spawn(PYTHON_PATH, args);
+          const proc = spawn(ytDlpCommand, args);
 
           proc.on("close", (code) => {
             const dirFiles = fs.readdirSync(os.tmpdir());
@@ -75,15 +70,8 @@ export async function POST(req: NextRequest) {
         });
 
         const ffmpegArgs: string[] = ["-y", "-i", downloadedRaw];
-        const filters: string[] = [];
-        const volNum = parseFloat(volumeBoost);
-        if (!isNaN(volNum) && volNum !== 1.0) filters.push(`volume=${volNum}`);
-        if (normalize) filters.push("dynaudnorm=f=150:g=15");
-        if (filters.length > 0) ffmpegArgs.push("-af", filters.join(","));
-
         if (format === "mp3") ffmpegArgs.push("-c:a", "libmp3lame", "-b:a", bitrate);
         else if (format === "flac") ffmpegArgs.push("-c:a", "flac");
-        else if (format === "wav") ffmpegArgs.push("-c:a", "pcm_s16le");
         else ffmpegArgs.push("-c:a", "libmp3lame", "-b:a", "320k");
 
         if (track.title) ffmpegArgs.push("-metadata", `title=${track.title}`);
@@ -104,7 +92,7 @@ export async function POST(req: NextRequest) {
           archive.file(outPath, { name: filename });
         }
       } catch (trackErr) {
-        console.error(`Erreur piste ${track.title}:`, trackErr);
+        console.error(`Erreur piste ${i + 1}:`, trackErr);
       }
     }
 
@@ -118,14 +106,15 @@ export async function POST(req: NextRequest) {
     const fileStream = fs.createReadStream(zipPath);
 
     const headers = new Headers();
-    headers.set("Content-Disposition", `attachment; filename="${encodeURIComponent(zipName)}"`);
+    const cleanZipName = playlistName.replace(/[^a-zA-Z0-9_\-\. ]/g, "").trim() || "Playlist";
+    headers.set("Content-Disposition", `attachment; filename="${encodeURIComponent(cleanZipName)}.zip"`);
     headers.set("Content-Type", "application/zip");
     headers.set("Content-Length", String(fileStat.size));
 
     fileStream.on("end", () => {
-      tmpFiles.forEach(f => {
-        if (fs.existsSync(f)) {
-          try { fs.unlinkSync(f); } catch {}
+      tmpFiles.forEach((file) => {
+        if (fs.existsSync(file)) {
+          try { fs.unlinkSync(file); } catch {}
         }
       });
     });
@@ -142,13 +131,14 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error("Erreur API Batch ZIP:", error);
-    tmpFiles.forEach(f => {
-      if (fs.existsSync(f)) {
-        try { fs.unlinkSync(f); } catch {}
+    tmpFiles.forEach((file) => {
+      if (fs.existsSync(file)) {
+        try { fs.unlinkSync(file); } catch {}
       }
     });
+
     return NextResponse.json(
-      { error: error.message || "Erreur lors de la création de l'archive ZIP." },
+      { error: error.message || "Erreur lors de la génération de la playlist ZIP." },
       { status: 500 }
     );
   }

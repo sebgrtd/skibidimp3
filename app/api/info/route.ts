@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "child_process";
 
-const PYTHON_PATH = `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe`;
-const NODE_PATH = `C:\\Program Files\\nodejs\\node.exe`;
+const PYTHON_PATH = process.env.PYTHON_PATH || (process.platform === "win32" ? `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe` : "python3");
+const NODE_PATH = process.env.NODE_PATH || (process.platform === "win32" ? `C:\\Program Files\\nodejs\\node.exe` : "node");
 
 function runYtDlp(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(PYTHON_PATH, args);
+    const isModule = PYTHON_PATH.includes("python");
+    const fullArgs = isModule ? ["-m", "yt_dlp", ...args] : args;
+    const command = isModule ? PYTHON_PATH : "yt-dlp";
+
+    const proc = spawn(command, fullArgs);
     let stdout = "";
     let stderr = "";
 
@@ -94,7 +98,6 @@ export async function POST(req: NextRequest) {
                 const searchQuery = `${artistName} - ${trackTitle} audio`;
 
                 const stdout = await runYtDlp([
-                  "-m", "yt_dlp",
                   "--js-runtimes", `node:${NODE_PATH}`,
                   "--extractor-args", "youtube:player_client=android,web",
                   "--flat-playlist",
@@ -127,7 +130,6 @@ export async function POST(req: NextRequest) {
 
     // Handle YouTube / SoundCloud / Generic via yt-dlp
     const stdout = await runYtDlp([
-      "-m", "yt_dlp",
       "--js-runtimes", `node:${NODE_PATH}`,
       "--extractor-args", "youtube:player_client=android,web",
       "--flat-playlist",

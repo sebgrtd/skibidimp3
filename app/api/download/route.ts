@@ -5,8 +5,8 @@ import path from "path";
 import os from "os";
 import NodeID3 from "node-id3";
 
-const PYTHON_PATH = `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe`;
-const NODE_PATH = `C:\\Program Files\\nodejs\\node.exe`;
+const PYTHON_PATH = process.env.PYTHON_PATH || (process.platform === "win32" ? `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe` : "python3");
+const NODE_PATH = process.env.NODE_PATH || (process.platform === "win32" ? `C:\\Program Files\\nodejs\\node.exe` : "node");
 
 export async function POST(req: NextRequest) {
   const tmpFiles: string[] = [];
@@ -25,95 +25,97 @@ export async function POST(req: NextRequest) {
     } = body;
 
     if (!url || typeof url !== "string") {
-      return NextResponse.json({ error: "URL requise." }, { status: 400 });
+      return NextResponse.json({ error: "URL invalide ou manquante." }, { status: 400 });
     }
 
     const uniqueId = Date.now() + "_" + Math.random().toString(36).substring(2, 9);
     const rawPattern = `raw_${uniqueId}`;
     const rawTemplate = path.join(os.tmpdir(), `${rawPattern}.%(ext)s`);
-    const outputAudioPath = path.join(os.tmpdir(), `output_${uniqueId}.${format}`);
-    
-    tmpFiles.push(outputAudioPath);
+    const outPath = path.join(os.tmpdir(), `out_${uniqueId}.${format}`);
+    tmpFiles.push(outPath);
 
-    // Step 1: Download raw audio with yt-dlp
-    let downloadedRawFile = "";
+    // 1. Run yt-dlp to extract raw audio stream
+    const isModule = PYTHON_PATH.includes("python");
+    const ytDlpCommand = isModule ? PYTHON_PATH : "yt-dlp";
+    const ytDlpBaseArgs = isModule ? ["-m", "yt_dlp"] : [];
+
+    const ytDlpArgs = [
+      ...ytDlpBaseArgs,
+      "--js-runtimes", `node:${NODE_PATH}`,
+      "--extractor-args", "youtube:player_client=android,web",
+      "-f", "ba/b",
+      "-x",
+      "-o", rawTemplate,
+      "--no-playlist",
+      url.trim(),
+    ];
+
+    let downloadedRaw = "";
     await new Promise<void>((resolve, reject) => {
-      const args = [
-        "-m", "yt_dlp",
-        "--js-runtimes", `node:${NODE_PATH}`,
-        "--extractor-args", "youtube:player_client=android,web",
-        "-f", "ba/b",
-        "-x",
-        "-o", rawTemplate,
-        "--no-playlist",
-        url
-      ];
+      const proc = spawn(ytDlpCommand, ytDlpArgs);
+      let stderr = "";
 
-      let stderrLog = "";
-      let stdoutLog = "";
+      proc.stderr.on("data", (chunk) => stderr += chunk.toString());
 
-      const ytProcess = spawn(PYTHON_PATH, args);
-
-      ytProcess.stdout.on("data", (d) => stdoutLog += d.toString());
-      ytProcess.stderr.on("data", (d) => stderrLog += d.toString());
-
-      ytProcess.on("close", (code) => {
-        // Search temp directory for created file matching rawPattern
+      proc.on("close", (code) => {
         const dirFiles = fs.readdirSync(os.tmpdir());
         const match = dirFiles.find(f => f.startsWith(rawPattern));
 
         if (match) {
-          downloadedRawFile = path.join(os.tmpdir(), match);
-          tmpFiles.push(downloadedRawFile);
+          downloadedRaw = path.join(os.tmpdir(), match);
+          tmpFiles.push(downloadedRaw);
           resolve();
         } else {
-          console.error("yt-dlp stderr:", stderrLog);
-          console.error("yt-dlp stdout:", stdoutLog);
-          reject(new Error(`yt-dlp a échoué (code ${code}): ${stderrLog || stdoutLog || "Fichier introuvable"}`));
+          reject(new Error(`Erreur d'extraction d'origine: ${stderr || `code ${code}`}`));
         }
       });
 
-      ytProcess.on("error", (err) => reject(err));
+      proc.on("error", (err) => reject(err));
     });
 
-    // Step 2: Process audio with ffmpeg
+    // 2. FFmpeg processing
     const ffmpegArgs: string[] = ["-y"];
 
-    if (startTime && Number(startTime) > 0) {
+    if (startTime && !isNaN(Number(startTime)) && Number(startTime) > 0) {
       ffmpegArgs.push("-ss", String(startTime));
     }
 
-    if (endTime && Number(endTime) > 0) {
+    ffmpegArgs.push("-i", downloadedRaw);
+
+    if (endTime && !isNaN(Number(endTime)) && Number(endTime) > 0) {
       ffmpegArgs.push("-to", String(endTime));
     }
 
-    ffmpegArgs.push("-i", downloadedRawFile);
+    const afFilters: string[] = [];
 
-    const filters: string[] = [];
-    const volNum = parseFloat(volumeBoost);
-    if (!isNaN(volNum) && volNum !== 1.0) {
-      filters.push(`volume=${volNum}`);
+    if (volumeBoost && volumeBoost !== "1.0" && !isNaN(Number(volumeBoost))) {
+      afFilters.push(`volume=${volumeBoost}`);
     }
     if (normalize) {
-      filters.push("dynaudnorm=f=150:g=15");
+      afFilters.push("loudnorm=I=-16:TP=-1.5:LRA=11");
     }
 
-    if (filters.length > 0) {
-      ffmpegArgs.push("-af", filters.join(","));
+    if (afFilters.length > 0) {
+      ffmpegArgs.push("-af", afFilters.join(","));
     }
 
-    if (format === "mp3") {
-      ffmpegArgs.push("-c:a", "libmp3lame", "-b:a", bitrate);
-    } else if (format === "flac") {
-      ffmpegArgs.push("-c:a", "flac");
-    } else if (format === "wav") {
-      ffmpegArgs.push("-c:a", "pcm_s16le");
-    } else if (format === "m4a" || format === "aac") {
-      ffmpegArgs.push("-c:a", "aac", "-b:a", bitrate);
-    } else if (format === "ogg") {
-      ffmpegArgs.push("-c:a", "libvorbis", "-b:a", bitrate);
-    } else {
-      ffmpegArgs.push("-c:a", "libmp3lame", "-b:a", "320k");
+    switch (format.toLowerCase()) {
+      case "flac":
+        ffmpegArgs.push("-c:a", "flac");
+        break;
+      case "wav":
+        ffmpegArgs.push("-c:a", "pcm_s16le");
+        break;
+      case "m4a":
+        ffmpegArgs.push("-c:a", "aac", "-b:a", bitrate);
+        break;
+      case "ogg":
+        ffmpegArgs.push("-c:a", "libvorbis", "-b:a", bitrate);
+        break;
+      case "mp3":
+      default:
+        ffmpegArgs.push("-c:a", "libmp3lame", "-b:a", bitrate);
+        break;
     }
 
     if (metadata.title) ffmpegArgs.push("-metadata", `title=${metadata.title}`);
@@ -122,73 +124,61 @@ export async function POST(req: NextRequest) {
     if (metadata.year) ffmpegArgs.push("-metadata", `date=${metadata.year}`);
     if (metadata.genre) ffmpegArgs.push("-metadata", `genre=${metadata.genre}`);
 
-    ffmpegArgs.push(outputAudioPath);
+    ffmpegArgs.push(outPath);
 
     await new Promise<void>((resolve, reject) => {
-      let ffErr = "";
-      const ffmpegProcess = spawn("ffmpeg", ffmpegArgs);
-      
-      ffmpegProcess.stderr.on("data", (d) => ffErr += d.toString());
-
-      ffmpegProcess.on("close", (code) => {
-        if (code === 0 && fs.existsSync(outputAudioPath)) {
-          resolve();
-        } else {
-          console.error("FFmpeg error log:", ffErr);
-          reject(new Error(`ffmpeg a échoué (code ${code}): ${ffErr}`));
-        }
+      const proc = spawn("ffmpeg", ffmpegArgs);
+      let stderr = "";
+      proc.stderr.on("data", (chunk) => stderr += chunk.toString());
+      proc.on("close", (code) => {
+        if (code === 0 && fs.existsSync(outPath)) resolve();
+        else reject(new Error(`Erreur conversion FFmpeg: ${stderr || `code ${code}`}`));
       });
-      ffmpegProcess.on("error", (err) => reject(err));
+      proc.on("error", (err) => reject(err));
     });
 
-    // Step 3: Inject ID3 Cover Art & Metadata if MP3
-    if (format === "mp3" && (metadata.coverUrl || metadata.title)) {
+    // 3. ID3 Cover Image Embedding for MP3
+    if (format.toLowerCase() === "mp3" && metadata.coverUrl) {
       try {
-        const tags: NodeID3.Tags = {
-          title: metadata.title || undefined,
-          artist: metadata.artist || undefined,
-          album: metadata.album || undefined,
-          year: metadata.year || undefined,
-          genre: metadata.genre || undefined,
-        };
-
-        if (metadata.coverUrl) {
-          const imageRes = await fetch(metadata.coverUrl);
-          if (imageRes.ok) {
-            const arrayBuffer = await imageRes.arrayBuffer();
-            const imageBuffer = Buffer.from(arrayBuffer);
-            tags.image = {
+        const imgRes = await fetch(metadata.coverUrl);
+        if (imgRes.ok) {
+          const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+          const tags: NodeID3.Tags = {
+            title: metadata.title,
+            artist: metadata.artist,
+            album: metadata.album,
+            year: metadata.year,
+            genre: metadata.genre,
+            image: {
               mime: "image/jpeg",
               type: { id: 3, name: "front cover" },
-              description: "Cover Art",
-              imageBuffer: imageBuffer,
-            };
-          }
+              description: "Cover",
+              imageBuffer: imgBuffer,
+            },
+          };
+          NodeID3.write(tags, outPath);
         }
-
-        NodeID3.write(tags, outputAudioPath);
-      } catch (id3Err) {
-        console.warn("Avertissement injection ID3 tags:", id3Err);
+      } catch (imgErr) {
+        console.error("Erreur d'insertion de pochette ID3:", imgErr);
       }
     }
 
-    // Step 4: Stream file response
-    const fileStat = fs.statSync(outputAudioPath);
-    const fileStream = fs.createReadStream(outputAudioPath);
-
-    const cleanTitle = (metadata.title || "audio_download").replace(/[^a-zA-Z0-9_\-\. ]/g, "").trim();
-    const cleanArtist = (metadata.artist || "").replace(/[^a-zA-Z0-9_\-\. ]/g, "").trim();
-    const filename = cleanArtist ? `${cleanArtist} - ${cleanTitle}.${format}` : `${cleanTitle}.${format}`;
+    const fileStat = fs.statSync(outPath);
+    const fileStream = fs.createReadStream(outPath);
 
     const headers = new Headers();
-    headers.set("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`);
-    headers.set("Content-Type", format === "mp3" ? "audio/mpeg" : `audio/${format}`);
+    const cleanTitle = (metadata.title || "audio").replace(/[^a-zA-Z0-9_\-\. ]/g, "").trim();
+    const cleanArtist = (metadata.artist || "").replace(/[^a-zA-Z0-9_\-\. ]/g, "").trim();
+    const fileName = cleanArtist ? `${cleanArtist} - ${cleanTitle}.${format}` : `${cleanTitle}.${format}`;
+
+    headers.set("Content-Disposition", `attachment; filename="${encodeURIComponent(fileName)}"`);
+    headers.set("Content-Type", `audio/${format === "mp3" ? "mpeg" : format}`);
     headers.set("Content-Length", String(fileStat.size));
 
     fileStream.on("end", () => {
-      tmpFiles.forEach(f => {
-        if (fs.existsSync(f)) {
-          try { fs.unlinkSync(f); } catch {}
+      tmpFiles.forEach((file) => {
+        if (fs.existsSync(file)) {
+          try { fs.unlinkSync(file); } catch {}
         }
       });
     });
@@ -204,14 +194,15 @@ export async function POST(req: NextRequest) {
     return new NextResponse(readableStream, { headers });
 
   } catch (error: any) {
-    console.error("Erreur Téléchargement API:", error);
-    tmpFiles.forEach(f => {
-      if (fs.existsSync(f)) {
-        try { fs.unlinkSync(f); } catch {}
+    console.error("Erreur API /download:", error);
+    tmpFiles.forEach((file) => {
+      if (fs.existsSync(file)) {
+        try { fs.unlinkSync(file); } catch {}
       }
     });
+
     return NextResponse.json(
-      { error: error.message || "Erreur lors du traitement et téléchargement audio." },
+      { error: error.message || "Une erreur est survenue lors de la génération de votre fichier audio." },
       { status: 500 }
     );
   }
