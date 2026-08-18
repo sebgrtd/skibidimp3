@@ -29,6 +29,32 @@ function runYtDlp(args: string[]): Promise<string> {
   });
 }
 
+async function fetchInfoWithFallback(trimmedUrl: string): Promise<string> {
+  // Primary attempt
+  try {
+    return await runYtDlp([
+      "--js-runtimes", `node:${NODE_PATH}`,
+      "--remote-components", "ejs:github",
+      "--flat-playlist",
+      "--dump-json",
+      "--no-warnings",
+      trimmedUrl
+    ]);
+  } catch (err: any) {
+    console.warn("First yt-dlp info attempt failed:", err.message);
+
+    // Fallback attempt with mweb,tv,web player clients
+    return await runYtDlp([
+      "--js-runtimes", `node:${NODE_PATH}`,
+      "--extractor-args", "youtube:player_client=mweb,tv,web",
+      "--flat-playlist",
+      "--dump-json",
+      "--no-warnings",
+      trimmedUrl
+    ]);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { url } = await req.json();
@@ -97,13 +123,24 @@ export async function POST(req: NextRequest) {
                 const artistName = entity.artists?.[0]?.name || entity.subtitle || "";
                 const searchQuery = `${artistName} - ${trackTitle} audio`;
 
-                const stdout = await runYtDlp([
-                  "--js-runtimes", `node:${NODE_PATH}`,
-                  "--extractor-args", "youtube:player_client=android,web",
-                  "--flat-playlist",
-                  "--dump-json",
-                  `ytsearch1:${searchQuery}`
-                ]);
+                let stdout = "";
+                try {
+                  stdout = await runYtDlp([
+                    "--js-runtimes", `node:${NODE_PATH}`,
+                    "--remote-components", "ejs:github",
+                    "--flat-playlist",
+                    "--dump-json",
+                    `ytsearch1:${searchQuery}`
+                  ]);
+                } catch {
+                  stdout = await runYtDlp([
+                    "--js-runtimes", `node:${NODE_PATH}`,
+                    "--extractor-args", "youtube:player_client=mweb,tv,web",
+                    "--flat-playlist",
+                    "--dump-json",
+                    `ytsearch1:${searchQuery}`
+                  ]);
+                }
 
                 const ytInfo = JSON.parse(stdout.split("\n")[0]);
 
@@ -128,15 +165,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Handle YouTube / SoundCloud / Generic via yt-dlp
-    const stdout = await runYtDlp([
-      "--js-runtimes", `node:${NODE_PATH}`,
-      "--extractor-args", "youtube:player_client=android,web",
-      "--flat-playlist",
-      "--dump-json",
-      "--no-warnings",
-      trimmedUrl
-    ]);
+    // Handle YouTube / SoundCloud / Generic via yt-dlp with fallback
+    const stdout = await fetchInfoWithFallback(trimmedUrl);
 
     const lines = stdout.trim().split("\n").filter(Boolean);
 

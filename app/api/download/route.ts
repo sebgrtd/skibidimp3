@@ -8,6 +8,68 @@ import NodeID3 from "node-id3";
 const PYTHON_PATH = process.env.PYTHON_PATH || (process.platform === "win32" ? `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe` : "python3");
 const NODE_PATH = process.env.NODE_PATH || (process.platform === "win32" ? `C:\\Program Files\\nodejs\\node.exe` : "node");
 
+async function extractAudioStream(downloadUrl: string, rawTemplate: string): Promise<string> {
+  const isModule = PYTHON_PATH.includes("python");
+  const ytDlpCommand = isModule ? PYTHON_PATH : "yt-dlp";
+  const ytDlpBaseArgs = isModule ? ["-m", "yt_dlp"] : [];
+
+  // Try standard execution first with remote components and fallback clients
+  const attemptDownload = (args: string[]) => {
+    return new Promise<string>((resolve, reject) => {
+      const proc = spawn(ytDlpCommand, args);
+      let stderr = "";
+
+      proc.stderr.on("data", (chunk) => stderr += chunk.toString());
+
+      proc.on("close", (code) => {
+        const dirFiles = fs.readdirSync(os.tmpdir());
+        const rawPattern = path.basename(rawTemplate).split(".")[0];
+        const match = dirFiles.find(f => f.startsWith(rawPattern));
+
+        if (match) {
+          resolve(path.join(os.tmpdir(), match));
+        } else {
+          reject(new Error(stderr.trim() || `code ${code}`));
+        }
+      });
+
+      proc.on("error", (err) => reject(err));
+    });
+  };
+
+  // Primary flags
+  const primaryArgs = [
+    ...ytDlpBaseArgs,
+    "--js-runtimes", `node:${NODE_PATH}`,
+    "--remote-components", "ejs:github",
+    "-f", "ba/b",
+    "-x",
+    "-o", rawTemplate,
+    "--no-playlist",
+    downloadUrl,
+  ];
+
+  try {
+    return await attemptDownload(primaryArgs);
+  } catch (err: any) {
+    console.warn("Premier essai yt-dlp échoué:", err.message);
+
+    // If bot check or DRM error occurs, retry with alternative player client
+    const fallbackArgs = [
+      ...ytDlpBaseArgs,
+      "--js-runtimes", `node:${NODE_PATH}`,
+      "--extractor-args", "youtube:player_client=mweb,tv,web",
+      "-f", "ba/b",
+      "-x",
+      "-o", rawTemplate,
+      "--no-playlist",
+      downloadUrl,
+    ];
+
+    return await attemptDownload(fallbackArgs);
+  }
+}
+
 export async function POST(req: NextRequest) {
   const tmpFiles: string[] = [];
 
@@ -28,6 +90,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "URL invalide ou manquante." }, { status: 400 });
     }
 
+    const trimmedUrl = url.trim();
+    let downloadTargetUrl = trimmedUrl;
+
+    // Handle Spotify links: Convert to YouTube search to bypass DRM error
+    if (trimmedUrl.includes("spotify.com")) {
+      const searchTerms = [metadata.artist, metadata.title].filter(Boolean).join(" ");
+      if (searchTerms.trim()) {
+        downloadTargetUrl = `ytsearch1:${searchTerms} audio`;
+      } else {
+        // Fallback: extract track name from URL if possible
+        const trackMatch = trimmedUrl.match(/track\/([a-zA-Z0-9]+)/);
+        if (trackMatch) {
+          downloadTargetUrl = `ytsearch1:spotify track ${trackMatch[1]} audio`;
+        }
+      }
+    }
+
     const uniqueId = Date.now() + "_" + Math.random().toString(36).substring(2, 9);
     const rawPattern = `raw_${uniqueId}`;
     const rawTemplate = path.join(os.tmpdir(), `${rawPattern}.%(ext)s`);
@@ -35,43 +114,21 @@ export async function POST(req: NextRequest) {
     tmpFiles.push(outPath);
 
     // 1. Run yt-dlp to extract raw audio stream
-    const isModule = PYTHON_PATH.includes("python");
-    const ytDlpCommand = isModule ? PYTHON_PATH : "yt-dlp";
-    const ytDlpBaseArgs = isModule ? ["-m", "yt_dlp"] : [];
-
-    const ytDlpArgs = [
-      ...ytDlpBaseArgs,
-      "--js-runtimes", `node:${NODE_PATH}`,
-      "--extractor-args", "youtube:player_client=android,web",
-      "-f", "ba/b",
-      "-x",
-      "-o", rawTemplate,
-      "--no-playlist",
-      url.trim(),
-    ];
-
     let downloadedRaw = "";
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn(ytDlpCommand, ytDlpArgs);
-      let stderr = "";
-
-      proc.stderr.on("data", (chunk) => stderr += chunk.toString());
-
-      proc.on("close", (code) => {
-        const dirFiles = fs.readdirSync(os.tmpdir());
-        const match = dirFiles.find(f => f.startsWith(rawPattern));
-
-        if (match) {
-          downloadedRaw = path.join(os.tmpdir(), match);
-          tmpFiles.push(downloadedRaw);
-          resolve();
-        } else {
-          reject(new Error(`Erreur d'extraction d'origine: ${stderr || `code ${code}`}`));
-        }
-      });
-
-      proc.on("error", (err) => reject(err));
-    });
+    try {
+      downloadedRaw = await extractAudioStream(downloadTargetUrl, rawTemplate);
+      tmpFiles.push(downloadedRaw);
+    } catch (extractErr: any) {
+      // If direct URL extraction failed on YouTube, try fallback search query
+      if (metadata.title && !downloadTargetUrl.startsWith("ytsearch1:")) {
+        const fallbackSearch = `ytsearch1:${metadata.artist || ""} ${metadata.title} audio`.trim();
+        console.log("Tentative de secours via recherche YouTube:", fallbackSearch);
+        downloadedRaw = await extractAudioStream(fallbackSearch, rawTemplate);
+        tmpFiles.push(downloadedRaw);
+      } else {
+        throw extractErr;
+      }
+    }
 
     // 2. FFmpeg processing
     const ffmpegArgs: string[] = ["-y"];
@@ -183,11 +240,40 @@ export async function POST(req: NextRequest) {
       });
     });
 
+    let isClosed = false;
     const readableStream = new ReadableStream({
       start(controller) {
-        fileStream.on("data", (chunk) => controller.enqueue(chunk));
-        fileStream.on("end", () => controller.close());
-        fileStream.on("error", (err) => controller.error(err));
+        fileStream.on("data", (chunk) => {
+          if (!isClosed) {
+            try {
+              controller.enqueue(chunk);
+            } catch {
+              isClosed = true;
+            }
+          }
+        });
+
+        fileStream.on("end", () => {
+          if (!isClosed) {
+            isClosed = true;
+            try {
+              controller.close();
+            } catch {}
+          }
+        });
+
+        fileStream.on("error", (err) => {
+          if (!isClosed) {
+            isClosed = true;
+            try {
+              controller.error(err);
+            } catch {}
+          }
+        });
+      },
+      cancel() {
+        isClosed = true;
+        fileStream.destroy();
       },
     });
 
