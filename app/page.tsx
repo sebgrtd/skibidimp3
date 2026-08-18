@@ -8,7 +8,7 @@ import PlaylistConverter from "@/components/PlaylistConverter";
 import UserDashboard, { SyncedHistoryItem } from "@/components/UserDashboard";
 import AdminPanel from "@/components/AdminPanel";
 import FeaturesGrid from "@/components/FeaturesGrid";
-import { Sparkles, Youtube, Music, Radio, Loader2, ShieldCheck } from "lucide-react";
+import { Sparkles, Youtube, Music, Radio, Loader2 } from "lucide-react";
 
 interface UserProfile {
   id: string;
@@ -28,7 +28,7 @@ export default function Home() {
   // Verify auth session on load
   const checkAuth = async () => {
     try {
-      const res = await fetch("/api/auth/me");
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
       const data = await res.json();
       if (res.ok && data.authenticated && data.user) {
         setUser(data.user);
@@ -45,7 +45,7 @@ export default function Home() {
 
   const fetchUserHistory = async () => {
     try {
-      const res = await fetch("/api/user/history");
+      const res = await fetch("/api/user/history", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setUserHistory(data.history || []);
