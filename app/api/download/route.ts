@@ -130,16 +130,20 @@ export async function POST(req: NextRequest) {
     const trimmedUrl = url.trim();
     let downloadTargetUrl = trimmedUrl;
 
-    // Handle Spotify links: Use SoundCloud search to bypass Spotify DRM and YouTube bot-blocks
-    if (trimmedUrl.includes("spotify.com") || trimmedUrl.includes("open.spotify.com")) {
+    // Handle Spotify links or YouTube search results: Use SoundCloud search to bypass DRM and YouTube bot-blocks
+    if (trimmedUrl.includes("spotify.com") || trimmedUrl.includes("open.spotify.com") || trimmedUrl.includes("results?search_query=")) {
       const searchTerms = [metadata.artist, metadata.title].filter(Boolean).join(" ");
       if (searchTerms.trim()) {
-        // Prefer SoundCloud search since YouTube blocks datacenter IPs
         downloadTargetUrl = `scsearch5:${searchTerms}`;
       } else {
-        const trackMatch = trimmedUrl.match(/track\/([a-zA-Z0-9]+)/);
-        if (trackMatch) {
-          downloadTargetUrl = `scsearch5:spotify ${trackMatch[1]}`;
+        const queryMatch = trimmedUrl.match(/search_query=([^&]+)/);
+        if (queryMatch) {
+          downloadTargetUrl = `scsearch5:${decodeURIComponent(queryMatch[1].replace(/\+/g, " "))}`;
+        } else {
+          const trackMatch = trimmedUrl.match(/(?:track|album|playlist)\/([a-zA-Z0-9]+)/);
+          if (trackMatch) {
+            downloadTargetUrl = `scsearch5:spotify ${trackMatch[1]}`;
+          }
         }
       }
     }

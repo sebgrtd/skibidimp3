@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserByToken, getUserDownloadHistory, addDownloadHistory } from "@/lib/db";
+import { 
+  getUserByToken, 
+  getUserDownloadHistory, 
+  addDownloadHistory,
+  deleteDownloadHistoryRecord,
+  deleteBatchDownloadHistory,
+  clearUserDownloadHistory
+} from "@/lib/db";
 
 function getAuthUser(req: NextRequest) {
   const token = req.cookies.get("skibidi_session")?.value || req.headers.get("authorization")?.replace("Bearer ", "");
@@ -46,3 +53,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const user = getAuthUser(req);
+  if (!user) {
+    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  }
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const { id, ids, clearAll } = body;
+
+    if (clearAll) {
+      clearUserDownloadHistory(user.id);
+      return NextResponse.json({ success: true, message: "Historique vidé avec succès." });
+    }
+
+    if (Array.isArray(ids) && ids.length > 0) {
+      deleteBatchDownloadHistory(user.id, ids);
+      return NextResponse.json({ success: true, message: `${ids.length} élément(s) supprimé(s).` });
+    }
+
+    if (id && typeof id === "string") {
+      const deleted = deleteDownloadHistoryRecord(user.id, id);
+      return NextResponse.json({ success: deleted, message: deleted ? "Élément supprimé." : "Élément introuvable." });
+    }
+
+    return NextResponse.json({ error: "Paramètres de suppression invalides." }, { status: 400 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+

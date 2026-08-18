@@ -136,25 +136,37 @@ export async function POST(req: NextRequest) {
               if (entity) {
                 if (type === "playlist" || type === "album") {
                   const rawTracks = entity.trackList || entity.tracks || [];
-                  const entries = rawTracks.map((t: any, idx: number) => ({
-                    index: idx + 1,
-                    id: t.id || `track_${idx}`,
-                    title: t.title || t.name,
-                    artist: t.artists ? t.artists.map((a: any) => a.name).join(", ") : (entity.subtitle || "Spotify"),
-                    duration: Math.floor((t.duration || 180000) / 1000),
-                    url: `https://www.youtube.com/results?search_query=${encodeURIComponent((t.artists?.[0]?.name || "") + " " + (t.title || t.name) + " audio")}`,
-                    thumbnail: t.coverUrl || entity.coverArt?.sources?.[0]?.url || null,
-                  }));
+                  const defaultAlbumArtist = entity.subtitle || (entity.artists ? entity.artists.map((a: any) => a.name).join(", ") : "Spotify");
+                  const entries = rawTracks.map((t: any, idx: number) => {
+                    const trackId = t.id || (t.uri ? t.uri.split(":").pop() : null) || `track_${idx}`;
+                    const trackArtist = t.artists ? t.artists.map((a: any) => a.name).join(", ") : (t.subtitle || defaultAlbumArtist);
+                    const trackTitle = t.title || t.name || `Piste ${idx + 1}`;
+                    const trackUrl = trackId && !trackId.startsWith("track_") 
+                      ? `https://open.spotify.com/track/${trackId}` 
+                      : `scsearch5:${trackArtist} ${trackTitle}`;
+
+                    return {
+                      index: idx + 1,
+                      id: trackId,
+                      title: trackTitle,
+                      artist: trackArtist,
+                      duration: Math.floor((t.duration || 180000) / 1000),
+                      url: trackUrl,
+                      originalUrl: trackUrl,
+                      thumbnail: t.coverUrl || entity.coverArt?.sources?.[0]?.url || null,
+                    };
+                  });
 
                   return NextResponse.json({
                     platform: "spotify",
                     isPlaylist: true,
-                    title: entity.title || entity.name || "Playlist Spotify",
-                    artist: entity.subtitle || "Spotify",
+                    title: entity.title || entity.name || "Album Spotify",
+                    artist: defaultAlbumArtist,
                     thumbnail: entity.coverArt?.sources?.[0]?.url || null,
                     totalTracks: entries.length,
                     entries,
                     url: trimmedUrl,
+                    originalUrl: trimmedUrl,
                   });
                 }
 

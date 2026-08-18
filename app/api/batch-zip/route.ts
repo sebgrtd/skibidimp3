@@ -39,35 +39,53 @@ export async function POST(req: NextRequest) {
       const outPath = path.join(os.tmpdir(), `out_${trackId}.${format}`);
       tmpFiles.push(outPath);
 
-      try {
-        let downloadedRaw = "";
-        await new Promise<void>((resolve, reject) => {
+      const searchTerms = [track.artist, track.title].filter(Boolean).join(" ");
+      let targetUrl = track.url || "";
+      if (targetUrl.includes("spotify.com") || targetUrl.includes("results?search_query=")) {
+        targetUrl = `scsearch5:${searchTerms}`;
+      }
+
+      const downloadTrackWithUrl = (urlToFetch: string) => {
+        return new Promise<string>((resolve, reject) => {
           const args = [
             ...ytDlpBaseArgs,
-            "--js-runtimes", `node:${NODE_PATH}`,
-            "--extractor-args", "youtube:player_client=android,web",
+            "--extractor-args", "youtube:player_client=android,web,tv",
             "-f", "ba/b",
             "-x",
             "-o", rawTemplate,
             "--no-playlist",
-            track.url,
+            urlToFetch,
           ];
           const proc = spawn(ytDlpCommand, args);
 
-          proc.on("close", (code) => {
+          proc.on("close", () => {
             const dirFiles = fs.readdirSync(os.tmpdir());
-            const match = dirFiles.find(f => f.startsWith(rawPattern));
+            const match = dirFiles.find(f => f.startsWith(rawPattern) && !f.endsWith(".part"));
 
             if (match) {
-              downloadedRaw = path.join(os.tmpdir(), match);
-              tmpFiles.push(downloadedRaw);
-              resolve();
+              const fullPath = path.join(os.tmpdir(), match);
+              tmpFiles.push(fullPath);
+              resolve(fullPath);
             } else {
               reject(new Error(`yt-dlp error track ${i}`));
             }
           });
           proc.on("error", (err) => reject(err));
         });
+      };
+
+      try {
+        let downloadedRaw = "";
+        try {
+          downloadedRaw = await downloadTrackWithUrl(targetUrl);
+        } catch {
+          // Fallback to scsearch5 if primary target fails
+          if (!targetUrl.startsWith("scsearch5:") && searchTerms.trim()) {
+            downloadedRaw = await downloadTrackWithUrl(`scsearch5:${searchTerms}`);
+          } else {
+            throw new Error("Impossible d'extraire la piste.");
+          }
+        }
 
         const ffmpegArgs: string[] = ["-y", "-i", downloadedRaw];
         if (format === "mp3") ffmpegArgs.push("-c:a", "libmp3lame", "-b:a", bitrate);

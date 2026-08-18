@@ -49,6 +49,7 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
   );
 
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [zipProgressPercent, setZipProgressPercent] = useState(0);
   const [progressMsg, setProgressMsg] = useState("");
   const [downloadingTrackId, setDownloadingTrackId] = useState<string | null>(null);
 
@@ -83,25 +84,29 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          url: track.url,
+          url: track.url || `https://open.spotify.com/track/${track.id}`,
           format,
           bitrate,
           volumeBoost,
           metadata: {
             title: track.title,
-            artist: track.artist || playlist.title,
+            artist: track.artist || playlist.artist || playlist.title,
             album: playlist.title,
+            coverUrl: track.thumbnail || playlist.thumbnail,
           },
         }),
       });
 
-      if (!res.ok) throw new Error("Échec du téléchargement.");
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || "Échec du téléchargement.");
+      }
 
       const blob = await res.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = blobUrl;
-      const cleanArtist = (track.artist || playlist.title).trim();
+      const cleanArtist = (track.artist || playlist.artist || playlist.title).trim();
       const cleanTitle = track.title.trim();
       a.download = `${cleanArtist} - ${cleanTitle}.${format}`;
       document.body.appendChild(a);
@@ -113,7 +118,7 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
         onAddToHistory({
           id: Date.now().toString(),
           title: track.title,
-          artist: track.artist || playlist.title,
+          artist: track.artist || playlist.artist || playlist.title,
           thumbnail: track.thumbnail || playlist.thumbnail,
           format,
           bitrate,
@@ -134,7 +139,24 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
     if (selectedTracks.length === 0) return;
 
     setDownloadingZip(true);
+    setZipProgressPercent(10);
     setProgressMsg(`Préparation de ${selectedTracks.length} pistes en HD (320kbps)...`);
+
+    const zipInterval = setInterval(() => {
+      setZipProgressPercent((prev) => {
+        if (prev < 30) {
+          setProgressMsg(`Connexion aux pistes de l'album (${selectedTracks.length} titres)...`);
+          return prev + 5;
+        } else if (prev < 80) {
+          setProgressMsg(`Conversion audio & compression ZIP haute vitesse...`);
+          return prev + 3;
+        } else if (prev < 95) {
+          setProgressMsg(`Finalisation de l'archive ZIP...`);
+          return prev + 1;
+        }
+        return prev;
+      });
+    }, 600);
 
     try {
       const res = await fetch("/api/batch-zip", {
@@ -142,23 +164,26 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tracks: selectedTracks.map((t) => ({
-            url: t.url,
+            url: t.url || `https://open.spotify.com/track/${t.id}`,
             title: t.title,
-            artist: t.artist || playlist.title,
+            artist: t.artist || playlist.artist || playlist.title,
           })),
           format,
           bitrate,
           volumeBoost,
-          zipName: `${playlist.title.replace(/[^a-zA-Z0-9_\- ]/g, "")}_320kbps.zip`,
+          playlistName: playlist.title,
         }),
       });
 
       if (!res.ok) {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Erreur lors de la création du ZIP.");
       }
 
-      setProgressMsg("Téléchargement du fichier ZIP...");
+      clearInterval(zipInterval);
+      setZipProgressPercent(100);
+      setProgressMsg("Archive ZIP prête ! Téléchargement...");
+
       const blob = await res.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -168,11 +193,16 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
       a.click();
       a.remove();
       window.URL.revokeObjectURL(blobUrl);
+
+      await new Promise((r) => setTimeout(r, 1000));
     } catch (err: any) {
+      clearInterval(zipInterval);
       alert("Erreur lors de la génération du ZIP: " + err.message);
     } finally {
+      clearInterval(zipInterval);
       setDownloadingZip(false);
       setProgressMsg("");
+      setZipProgressPercent(0);
     }
   };
 
@@ -271,6 +301,29 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
             </button>
           </div>
         </div>
+
+        {/* Real-time ZIP Progress Bar */}
+        {downloadingZip && (
+          <div className="pt-4 border-t border-slate-800 space-y-2 animate-fade-in">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-purple-300 font-medium truncate flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-400" />
+                {progressMsg}
+              </span>
+              <span className="font-mono font-bold text-emerald-400 shrink-0">
+                {Math.round(zipProgressPercent)}%
+              </span>
+            </div>
+            <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
+              <div 
+                className="h-full rounded-full bg-gradient-to-r from-purple-600 via-pink-500 to-emerald-400 transition-all duration-300 relative overflow-hidden"
+                style={{ width: `${Math.min(100, Math.max(5, zipProgressPercent))}%` }}
+              >
+                <div className="absolute inset-0 bg-white/20 animate-pulse" />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Playlist Track List Table */}

@@ -9,7 +9,9 @@ import {
   Square, 
   Loader2, 
   Music, 
-  RefreshCw
+  RefreshCw,
+  Trash2,
+  AlertTriangle
 } from "lucide-react";
 
 export interface SyncedHistoryItem {
@@ -33,8 +35,11 @@ interface UserDashboardProps {
 export default function UserDashboard({ user, history, onRefreshHistory }: UserDashboardProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [zipProgressPercent, setZipProgressPercent] = useState(0);
   const [progressMsg, setProgressMsg] = useState("");
   const [downloadingSingleId, setDownloadingSingleId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
 
   const toggleSelectAll = () => {
     if (selectedIds.length === history.length) {
@@ -49,6 +54,82 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
       setSelectedIds(selectedIds.filter((item) => item !== id));
     } else {
       setSelectedIds([...selectedIds, id]);
+    }
+  };
+
+  // Delete 1 single track from history
+  const handleDeleteSingle = async (id: string) => {
+    if (!confirm("Voulez-vous supprimer ce morceau de votre historique ?")) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch("/api/user/history", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        setSelectedIds(prev => prev.filter(i => i !== id));
+        onRefreshHistory();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert("Erreur lors de la suppression : " + (err.error || "Échec"));
+      }
+    } catch (err: any) {
+      alert("Erreur : " + err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // Delete selected tracks from history
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Supprimer définitivement les ${selectedIds.length} morceau(x) sélectionné(s) de votre historique ?`)) return;
+
+    setIsDeletingBatch(true);
+    try {
+      const res = await fetch("/api/user/history", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      if (res.ok) {
+        setSelectedIds([]);
+        onRefreshHistory();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert("Erreur lors de la suppression : " + (err.error || "Échec"));
+      }
+    } catch (err: any) {
+      alert("Erreur : " + err.message);
+    } finally {
+      setIsDeletingBatch(false);
+    }
+  };
+
+  // Clear entire user history
+  const handleClearAll = async () => {
+    if (history.length === 0) return;
+    if (!confirm("Êtes-vous sûr de vouloir vider TOUT votre historique de téléchargements ? Cette action est irréversible.")) return;
+
+    setIsDeletingBatch(true);
+    try {
+      const res = await fetch("/api/user/history", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clearAll: true }),
+      });
+      if (res.ok) {
+        setSelectedIds([]);
+        onRefreshHistory();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert("Erreur : " + (err.error || "Échec"));
+      }
+    } catch (err: any) {
+      alert("Erreur : " + err.message);
+    } finally {
+      setIsDeletingBatch(false);
     }
   };
 
@@ -93,8 +174,25 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
   // Batch ZIP re-download
   const handleBatchRedownload = async (downloadAll: boolean = false) => {
     setDownloadingZip(true);
+    setZipProgressPercent(10);
     const idsToDownload = downloadAll ? history.map(h => h.id) : selectedIds;
     setProgressMsg(`Préparation de ${idsToDownload.length} musiques en HD 320kbps...`);
+
+    const zipInterval = setInterval(() => {
+      setZipProgressPercent((prev) => {
+        if (prev < 30) {
+          setProgressMsg(`Connexion aux flux audio (${idsToDownload.length} titres)...`);
+          return prev + 6;
+        } else if (prev < 80) {
+          setProgressMsg(`Compression & conversion ZIP haute vitesse...`);
+          return prev + 3;
+        } else if (prev < 95) {
+          setProgressMsg(`Finalisation du fichier ZIP...`);
+          return prev + 1;
+        }
+        return prev;
+      });
+    }, 500);
 
     try {
       const res = await fetch("/api/user/batch-redownload", {
@@ -107,11 +205,14 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
       });
 
       if (!res.ok) {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Échec de la création du fichier ZIP.");
       }
 
+      clearInterval(zipInterval);
+      setZipProgressPercent(100);
       setProgressMsg("Téléchargement du ZIP...");
+
       const blob = await res.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -121,11 +222,16 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
       a.click();
       a.remove();
       window.URL.revokeObjectURL(blobUrl);
+
+      await new Promise((r) => setTimeout(r, 1000));
     } catch (err: any) {
+      clearInterval(zipInterval);
       alert("Erreur ZIP : " + err.message);
     } finally {
+      clearInterval(zipInterval);
       setDownloadingZip(false);
       setProgressMsg("");
+      setZipProgressPercent(0);
     }
   };
 
@@ -149,16 +255,30 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
             </div>
           </div>
 
-          <button
-            onClick={onRefreshHistory}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            <span>Actualiser</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {history.length > 0 && (
+              <button
+                onClick={handleClearAll}
+                disabled={isDeletingBatch}
+                className="flex items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-500/20 transition-colors disabled:opacity-50"
+                title="Supprimer tout l'historique"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Tout effacer</span>
+              </button>
+            )}
+
+            <button
+              onClick={onRefreshHistory}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>Actualiser</span>
+            </button>
+          </div>
         </div>
 
-        {/* Global Controls for Batch Re-download */}
+        {/* Global Controls for Batch Re-download & Batch Delete */}
         {history.length > 0 && (
           <div className="pt-4 border-t border-slate-800/80 flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="flex items-center justify-between md:justify-start gap-3 w-full md:w-auto">
@@ -184,28 +304,40 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
               </span>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto justify-end">
               {selectedIds.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => handleBatchRedownload(false)}
-                  disabled={downloadingZip}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:bg-purple-500 disabled:opacity-50"
-                >
-                  {downloadingZip ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileArchive className="h-4 w-4" />
-                  )}
-                  <span>Re-télécharger Sélection (.ZIP)</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={handleDeleteSelected}
+                    disabled={isDeletingBatch}
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-xs font-bold text-rose-400 hover:bg-rose-500/20 transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Supprimer ({selectedIds.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleBatchRedownload(false)}
+                    disabled={downloadingZip}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg hover:bg-purple-500 disabled:opacity-50"
+                  >
+                    {downloadingZip ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileArchive className="h-4 w-4" />
+                    )}
+                    <span>ZIP Sélection ({selectedIds.length})</span>
+                  </button>
+                </>
               )}
 
               <button
                 type="button"
                 onClick={() => handleBatchRedownload(true)}
                 disabled={downloadingZip}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 px-6 py-2.5 text-xs font-extrabold text-white shadow-lg shadow-purple-600/30 hover:brightness-110 disabled:opacity-50"
+                className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 px-5 py-2.5 text-xs font-extrabold text-white shadow-lg shadow-purple-600/30 hover:brightness-110 disabled:opacity-50"
               >
                 {downloadingZip ? (
                   <>
@@ -219,6 +351,29 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Real-time ZIP Progress Bar in Dashboard */}
+        {downloadingZip && (
+          <div className="pt-4 border-t border-slate-800 space-y-2 animate-fade-in">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-purple-300 font-medium truncate flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-400" />
+                {progressMsg}
+              </span>
+              <span className="font-mono font-bold text-emerald-400 shrink-0">
+                {Math.round(zipProgressPercent)}%
+              </span>
+            </div>
+            <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
+              <div 
+                className="h-full rounded-full bg-gradient-to-r from-purple-600 via-pink-500 to-emerald-400 transition-all duration-300 relative overflow-hidden"
+                style={{ width: `${Math.min(100, Math.max(5, zipProgressPercent))}%` }}
+              >
+                <div className="absolute inset-0 bg-white/20 animate-pulse" />
+              </div>
             </div>
           </div>
         )}
@@ -247,6 +402,7 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
             {history.map((item) => {
               const isSelected = selectedIds.includes(item.id);
               const isDownloadingThis = downloadingSingleId === item.id;
+              const isDeletingThis = deletingId === item.id;
 
               return (
                 <div
@@ -282,21 +438,34 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
                     <p className="text-[11px] sm:text-xs text-slate-400 truncate">{item.artist}</p>
                   </div>
 
-                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                    <span className="rounded-md border border-purple-500/30 bg-purple-500/10 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-mono font-bold text-purple-300">
+                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                    <span className="hidden sm:inline-block rounded-md border border-purple-500/30 bg-purple-500/10 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-mono font-bold text-purple-300">
                       {item.format.toUpperCase()} {item.bitrate}
                     </span>
 
                     <button
                       onClick={() => handleDownloadSingle(item)}
-                      disabled={isDownloadingThis}
-                      className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-300 hover:border-purple-500 hover:bg-purple-600 hover:text-white transition-colors"
+                      disabled={isDownloadingThis || isDeletingThis}
+                      className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-300 hover:border-purple-500 hover:bg-purple-600 hover:text-white transition-colors disabled:opacity-50"
                       title="Re-télécharger ce morceau"
                     >
                       {isDownloadingThis ? (
                         <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
                       ) : (
                         <Download className="h-4 w-4" />
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteSingle(item.id)}
+                      disabled={isDeletingThis || isDownloadingThis}
+                      className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-400 hover:border-rose-500 hover:bg-rose-500/20 hover:text-rose-400 transition-colors disabled:opacity-50"
+                      title="Supprimer de l'historique"
+                    >
+                      {isDeletingThis ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-rose-400" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
                       )}
                     </button>
                   </div>
@@ -309,3 +478,4 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
     </div>
   );
 }
+

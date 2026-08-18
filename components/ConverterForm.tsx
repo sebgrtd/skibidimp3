@@ -12,7 +12,8 @@ import {
   Youtube, 
   Radio, 
   AlertCircle,
-  Loader2
+  Loader2,
+  CheckCircle2
 } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 
@@ -60,6 +61,7 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
   // Download state
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState("");
+  const [downloadPercent, setDownloadPercent] = useState(0);
 
   const handleFetchInfo = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -106,7 +108,25 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
     if (!mediaInfo) return;
 
     setDownloading(true);
-    setDownloadProgress("Initialisation du moteur audio (320kbps)...");
+    setDownloadPercent(5);
+    setDownloadProgress("Connexion au flux audio HD...");
+
+    // Simulated smooth progress interval
+    const progressInterval = setInterval(() => {
+      setDownloadPercent((prev) => {
+        if (prev < 30) {
+          setDownloadProgress("Connexion au flux source & analyse du codec...");
+          return prev + 5;
+        } else if (prev < 70) {
+          setDownloadProgress("Extraction audio & Traitement FFmpeg (320kbps)...");
+          return prev + 3;
+        } else if (prev < 92) {
+          setDownloadProgress("Injection des métadonnées ID3 & Pochette HD...");
+          return prev + 1.5;
+        }
+        return prev;
+      });
+    }, 400);
 
     try {
       const payload = {
@@ -127,8 +147,6 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
         },
       };
 
-      setDownloadProgress("Extraction de l'audio et traitement des filtres...");
-
       const res = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -136,11 +154,13 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
       });
 
       if (!res.ok) {
-        const errJson = await res.json();
+        const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || "Échec du téléchargement.");
       }
 
-      setDownloadProgress("Téléchargement du fichier terminé !");
+      clearInterval(progressInterval);
+      setDownloadPercent(100);
+      setDownloadProgress("Fichier prêt ! Téléchargement en cours...");
 
       const blob = await res.blob();
       const blobUrl = window.URL.createObjectURL(blob);
@@ -168,7 +188,7 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
             thumbnail: mediaInfo.thumbnail,
             format,
             bitrate,
-            url: mediaInfo.url,
+            url: mediaInfo.originalUrl || mediaInfo.url,
           }),
         });
       } catch {}
@@ -182,14 +202,19 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
           format,
           bitrate,
           date: new Date().toLocaleDateString(),
-          url: mediaInfo.url,
+          url: mediaInfo.originalUrl || mediaInfo.url,
         });
       }
+
+      await new Promise((r) => setTimeout(r, 1200));
     } catch (err: any) {
+      clearInterval(progressInterval);
       setError(err.message || "Une erreur est survenue pendant le téléchargement.");
     } finally {
+      clearInterval(progressInterval);
       setDownloading(false);
       setDownloadProgress("");
+      setDownloadPercent(0);
     }
   };
 
@@ -332,6 +357,43 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
                   <span>{showSettings ? "Masquer Réglages" : "Réglages Avancés & Tags"}</span>
                 </button>
               </div>
+
+              {/* Real-time Animated Download Progress Bar */}
+              {downloading && (
+                <div className="mt-4 p-4 rounded-xl border border-purple-500/30 bg-slate-950/90 shadow-xl space-y-2.5 animate-fade-in">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 text-purple-300 font-medium truncate">
+                      {downloadPercent >= 100 ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <Loader2 className="h-4 w-4 text-purple-400 animate-spin shrink-0" />
+                      )}
+                      <span className="truncate">{downloadProgress}</span>
+                    </div>
+                    <span className="font-mono font-bold text-emerald-400 shrink-0 pl-2">
+                      {Math.round(downloadPercent)}%
+                    </span>
+                  </div>
+
+                  {/* Progress track */}
+                  <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                    <div 
+                      className="h-full rounded-full bg-gradient-to-r from-purple-600 via-pink-500 to-emerald-400 transition-all duration-300 shadow-sm shadow-purple-500/50 relative overflow-hidden"
+                      style={{ width: `${Math.min(100, Math.max(5, downloadPercent))}%` }}
+                    >
+                      <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                    </div>
+                  </div>
+
+                  {/* Step hints */}
+                  <div className="flex justify-between text-[10px] text-slate-500 font-mono px-0.5 pt-0.5">
+                    <span className={downloadPercent >= 10 ? "text-purple-400 font-bold" : ""}>1. Connexion</span>
+                    <span className={downloadPercent >= 45 ? "text-purple-400 font-bold" : ""}>2. Extraction 320k</span>
+                    <span className={downloadPercent >= 80 ? "text-pink-400 font-bold" : ""}>3. ID3 & Pochette</span>
+                    <span className={downloadPercent >= 100 ? "text-emerald-400 font-bold" : ""}>4. Téléchargement</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

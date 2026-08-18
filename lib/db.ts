@@ -240,6 +240,33 @@ export function getUserDownloadHistory(userId: string): DownloadHistoryRecord[] 
     .sort((a, b) => b.timestamp - a.timestamp);
 }
 
+export function deleteDownloadHistoryRecord(userId: string, historyId: string): boolean {
+  const history = readJson<DownloadHistoryRecord[]>(HISTORY_FILE);
+  const updated = history.filter((h) => !(h.userId === userId && h.id === historyId));
+  if (updated.length !== history.length) {
+    writeJson(HISTORY_FILE, updated);
+    return true;
+  }
+  return false;
+}
+
+export function deleteBatchDownloadHistory(userId: string, historyIds: string[]): boolean {
+  const history = readJson<DownloadHistoryRecord[]>(HISTORY_FILE);
+  const idsSet = new Set(historyIds);
+  const updated = history.filter((h) => !(h.userId === userId && idsSet.has(h.id)));
+  if (updated.length !== history.length) {
+    writeJson(HISTORY_FILE, updated);
+    return true;
+  }
+  return false;
+}
+
+export function clearUserDownloadHistory(userId: string): void {
+  const history = readJson<DownloadHistoryRecord[]>(HISTORY_FILE);
+  const updated = history.filter((h) => h.userId !== userId);
+  writeJson(HISTORY_FILE, updated);
+}
+
 // Invite Codes API
 export function generateInviteCode(adminUserId: string): InviteCode {
   const invites = readJson<InviteCode[]>(INVITES_FILE);
