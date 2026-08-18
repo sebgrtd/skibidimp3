@@ -63,7 +63,6 @@ function ensureDataFiles() {
     fs.writeFileSync(INVITES_FILE, JSON.stringify([]));
   }
 
-  // Seed default admin account if not exists
   seedAdminUser();
 }
 
@@ -99,13 +98,18 @@ export function verifyPassword(password: string, hash: string, salt: string): bo
 function seedAdminUser() {
   try {
     const users = JSON.parse(fs.readFileSync(USERS_FILE, "utf-8")) as User[];
-    const adminExists = users.some((u) => u.username.toLowerCase() === "admin" || u.isAdmin);
+    const adminUser = users.find((u) => u.username.toLowerCase() === "admin");
 
-    if (!adminExists) {
+    if (adminUser) {
+      if (!adminUser.isAdmin) {
+        adminUser.isAdmin = true;
+        fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
+      }
+    } else {
       const salt = crypto.randomBytes(16).toString("hex");
       const hash = crypto.scryptSync("SkibidiAdmin2026!", salt, 64).toString("hex");
 
-      const adminUser: User = {
+      const newAdmin: User = {
         id: "usr_admin_001",
         username: "admin",
         email: "admin@skibidi-mp3.sebastien-gratade.fr",
@@ -115,14 +119,14 @@ function seedAdminUser() {
         createdAt: new Date().toISOString(),
       };
 
-      users.unshift(adminUser);
+      users.unshift(newAdmin);
       fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
     }
   } catch {}
 }
 
 // Users API
-export function createUser(username: string, email: string, password: string): User {
+export function createUser(username: string, email: string, password: string, isAdmin: boolean = false): User {
   const users = readJson<User[]>(USERS_FILE);
   const normalizedEmail = email.toLowerCase().trim();
   const normalizedUsername = username.trim();
@@ -141,13 +145,18 @@ export function createUser(username: string, email: string, password: string): U
     email: normalizedEmail,
     passwordHash: hash,
     salt,
-    isAdmin: false,
+    isAdmin,
     createdAt: new Date().toISOString(),
   };
 
   users.push(newUser);
   writeJson(USERS_FILE, users);
   return newUser;
+}
+
+export function getAllUsers(): Omit<User, "passwordHash" | "salt">[] {
+  const users = readJson<User[]>(USERS_FILE);
+  return users.map(({ passwordHash, salt, ...u }) => u);
 }
 
 export function authenticateUser(usernameOrEmail: string, password: string): User {
@@ -160,6 +169,12 @@ export function authenticateUser(usernameOrEmail: string, password: string): Use
 
   if (!user || !verifyPassword(password, user.passwordHash, user.salt)) {
     throw new Error("Nom d'utilisateur/Email ou mot de passe incorrect.");
+  }
+
+  // Ensure admin user always has isAdmin = true
+  if (user.username.toLowerCase() === "admin" && !user.isAdmin) {
+    user.isAdmin = true;
+    writeJson(USERS_FILE, users);
   }
 
   return user;
@@ -187,7 +202,11 @@ export function getUserByToken(token: string): User | null {
   if (!session) return null;
 
   const users = readJson<User[]>(USERS_FILE);
-  return users.find((u) => u.id === session.userId) || null;
+  const user = users.find((u) => u.id === session.userId) || null;
+  if (user && user.username.toLowerCase() === "admin") {
+    user.isAdmin = true;
+  }
+  return user;
 }
 
 export function deleteSession(token: string): void {
