@@ -30,28 +30,39 @@ function runYtDlp(args: string[]): Promise<string> {
 }
 
 async function fetchInfoWithFallback(trimmedUrl: string): Promise<string> {
-  // Primary attempt
+  // Attempt 1: Standard with android,web,tv clients
   try {
     return await runYtDlp([
-      "--js-runtimes", `node:${NODE_PATH}`,
-      "--remote-components", "ejs:github",
+      "--extractor-args", "youtube:player_client=android,web,tv",
       "--flat-playlist",
       "--dump-json",
       "--no-warnings",
       trimmedUrl
     ]);
-  } catch (err: any) {
-    console.warn("First yt-dlp info attempt failed:", err.message);
+  } catch (err1: any) {
+    console.warn("Info attempt 1 failed:", err1.message?.split("\n")[0]);
 
-    // Fallback attempt with mweb,tv,web player clients
-    return await runYtDlp([
-      "--js-runtimes", `node:${NODE_PATH}`,
-      "--extractor-args", "youtube:player_client=mweb,tv,web",
-      "--flat-playlist",
-      "--dump-json",
-      "--no-warnings",
-      trimmedUrl
-    ]);
+    // Attempt 2: tv_embedded client (bypasses age restrictions)
+    try {
+      return await runYtDlp([
+        "--extractor-args", "youtube:player_client=tv_embedded,android,web",
+        "--flat-playlist",
+        "--dump-json",
+        "--no-warnings",
+        trimmedUrl
+      ]);
+    } catch (err2: any) {
+      console.warn("Info attempt 2 failed:", err2.message?.split("\n")[0]);
+
+      // Attempt 3: mweb fallback
+      return await runYtDlp([
+        "--extractor-args", "youtube:player_client=mweb,tv_embedded",
+        "--flat-playlist",
+        "--dump-json",
+        "--no-warnings",
+        trimmedUrl
+      ]);
+    }
   }
 }
 
@@ -126,20 +137,27 @@ export async function POST(req: NextRequest) {
                 let stdout = "";
                 try {
                   stdout = await runYtDlp([
-                    "--js-runtimes", `node:${NODE_PATH}`,
-                    "--remote-components", "ejs:github",
+                    "--extractor-args", "youtube:player_client=android,web,tv",
                     "--flat-playlist",
                     "--dump-json",
                     `ytsearch1:${searchQuery}`
                   ]);
                 } catch {
-                  stdout = await runYtDlp([
-                    "--js-runtimes", `node:${NODE_PATH}`,
-                    "--extractor-args", "youtube:player_client=mweb,tv,web",
-                    "--flat-playlist",
-                    "--dump-json",
-                    `ytsearch1:${searchQuery}`
-                  ]);
+                  try {
+                    stdout = await runYtDlp([
+                      "--extractor-args", "youtube:player_client=tv_embedded,android,web",
+                      "--flat-playlist",
+                      "--dump-json",
+                      `ytsearch1:${searchQuery}`
+                    ]);
+                  } catch {
+                    stdout = await runYtDlp([
+                      "--extractor-args", "youtube:player_client=mweb,tv_embedded",
+                      "--flat-playlist",
+                      "--dump-json",
+                      `ytsearch1:${searchQuery}`
+                    ]);
+                  }
                 }
 
                 const ytInfo = JSON.parse(stdout.split("\n")[0]);

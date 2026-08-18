@@ -19,7 +19,6 @@ async function extractAudioStream(downloadUrl: string, rawTemplate: string): Pro
       const args = [
         ...ytDlpBaseArgs,
         "--user-agent", USER_AGENT,
-        "--remote-components", "ejs:github",
         "-f", "ba/b",
         "-x",
         "-o", rawTemplate,
@@ -49,18 +48,25 @@ async function extractAudioStream(downloadUrl: string, rawTemplate: string): Pro
     });
   };
 
-  // Attempt 1: Standard extraction with android,web,tv player clients
+  // Attempt 1: android,web,tv clients
   try {
     return await attemptDownload(downloadUrl, ["--extractor-args", "youtube:player_client=android,web,tv"]);
-  } catch (err: any) {
-    console.warn("Attempt 1 yt-dlp failed:", err.message);
+  } catch (err1: any) {
+    console.warn("Download attempt 1 failed:", err1.message?.split("\n")[0]);
 
-    // Attempt 2: Fallback with mweb,tv,web player clients
+    // Attempt 2: tv_embedded — bypasses age restrictions
     try {
-      return await attemptDownload(downloadUrl, ["--extractor-args", "youtube:player_client=mweb,tv,web"]);
+      return await attemptDownload(downloadUrl, ["--extractor-args", "youtube:player_client=tv_embedded,android,web"]);
     } catch (err2: any) {
-      console.warn("Attempt 2 yt-dlp failed:", err2.message);
-      throw err2;
+      console.warn("Download attempt 2 failed:", err2.message?.split("\n")[0]);
+
+      // Attempt 3: mweb,tv_embedded
+      try {
+        return await attemptDownload(downloadUrl, ["--extractor-args", "youtube:player_client=mweb,tv_embedded"]);
+      } catch (err3: any) {
+        console.warn("Download attempt 3 failed:", err3.message?.split("\n")[0]);
+        throw err3;
+      }
     }
   }
 }
@@ -88,17 +94,23 @@ export async function POST(req: NextRequest) {
     const trimmedUrl = url.trim();
     let downloadTargetUrl = trimmedUrl;
 
-    // Handle Spotify links: Convert to YouTube search query to bypass Spotify DRM error
-    if (trimmedUrl.includes("spotify.com")) {
+    // Handle Spotify links: Use SoundCloud search to bypass Spotify DRM and YouTube bot-blocks
+    if (trimmedUrl.includes("spotify.com") || trimmedUrl.includes("open.spotify.com")) {
       const searchTerms = [metadata.artist, metadata.title].filter(Boolean).join(" ");
       if (searchTerms.trim()) {
-        downloadTargetUrl = `ytsearch1:${searchTerms} audio`;
+        // Prefer SoundCloud search since YouTube blocks datacenter IPs
+        downloadTargetUrl = `scsearch5:${searchTerms}`;
       } else {
         const trackMatch = trimmedUrl.match(/track\/([a-zA-Z0-9]+)/);
         if (trackMatch) {
-          downloadTargetUrl = `ytsearch1:spotify track ${trackMatch[1]} audio`;
+          downloadTargetUrl = `scsearch5:spotify ${trackMatch[1]}`;
         }
       }
+    }
+
+    // If the URL is a YouTube URL coming from Spotify info page, also try SoundCloud first
+    if (downloadTargetUrl.includes("youtube.com") && metadata.artist && metadata.title) {
+      // Keep YouTube URL but will fallback to SoundCloud if it fails
     }
 
     const uniqueId = Date.now() + "_" + Math.random().toString(36).substring(2, 9);

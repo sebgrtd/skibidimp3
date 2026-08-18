@@ -110,7 +110,7 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
 
     try {
       const payload = {
-        url: mediaInfo.url || url,
+        url: mediaInfo.originalUrl || mediaInfo.url || url,
         format,
         bitrate,
         startTime: Number(startTime) > 0 ? startTime : undefined,
