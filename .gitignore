@@ -34,6 +34,8 @@ next-env.d.json
 
 # test generated files & temp files
 test_*
+scratch/
+.data/
 *.mp3
 *.zip
 *.m4a

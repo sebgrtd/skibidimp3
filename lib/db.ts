@@ -103,8 +103,11 @@ export function verifyPassword(password: string, hash: string, salt: string): bo
 
 function seedAdminUser() {
   try {
+    const initialAdminUsername = process.env.ADMIN_USERNAME || "admin";
+    const initialAdminPassword = process.env.ADMIN_INITIAL_PASSWORD || "SkibidiAdmin2026!";
+
     const users = JSON.parse(fs.readFileSync(USERS_FILE, "utf-8")) as User[];
-    const adminUser = users.find((u) => u.username.toLowerCase() === "admin");
+    const adminUser = users.find((u) => u.username.toLowerCase() === initialAdminUsername.toLowerCase());
 
     if (adminUser) {
       let updated = false;
@@ -116,11 +119,11 @@ function seedAdminUser() {
         fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
       }
     } else {
-      const { hash, salt } = hashPassword("SkibidiAdmin2026!");
+      const { hash, salt } = hashPassword(initialAdminPassword);
 
       const newAdmin: User = {
         id: "usr_admin_001",
-        username: "admin",
+        username: initialAdminUsername,
         passwordHash: hash,
         salt,
         isAdmin: true,
@@ -160,6 +163,19 @@ export function createUser(username: string, password: string, isAdmin: boolean 
 export function getAllUsers(): Omit<User, "passwordHash" | "salt">[] {
   const users = readJson<User[]>(USERS_FILE);
   return users.map(({ passwordHash, salt, ...u }) => u);
+}
+
+export function updateUserPassword(userId: string, newPassword: string): boolean {
+  const users = readJson<User[]>(USERS_FILE);
+  const user = users.find((u) => u.id === userId);
+  if (!user) {
+    throw new Error("Utilisateur introuvable.");
+  }
+  const { hash, salt } = hashPassword(newPassword);
+  user.passwordHash = hash;
+  user.salt = salt;
+  writeJson(USERS_FILE, users);
+  return true;
 }
 
 export function authenticateUser(username: string, password: string): User {

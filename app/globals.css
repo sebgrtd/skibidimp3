@@ -4,80 +4,94 @@
 
 @layer base {
   :root {
-    --background: 240 10% 4%;
+    --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
 
-    --card: 240 10% 7%;
+    --card: 240 10% 6%;
     --card-foreground: 0 0% 98%;
 
-    --popover: 240 10% 7%;
+    --popover: 240 10% 6%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 270 95% 65%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 262.1 83.3% 57.8%;
+    --primary-foreground: 210 20% 98%;
 
-    --secondary: 240 8% 15%;
+    --secondary: 240 4.8% 12%;
     --secondary-foreground: 0 0% 98%;
 
-    --muted: 240 6% 14%;
-    --muted-foreground: 240 5% 65%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
 
-    --accent: 320 85% 60%;
+    --accent: 240 3.7% 15.9%;
     --accent-foreground: 0 0% 98%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 240 6% 18%;
-    --input: 240 6% 18%;
-    --ring: 270 95% 65%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 262.1 83.3% 57.8%;
 
     --radius: 0.75rem;
   }
 }
 
 body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
+  background-color: #09090b;
+  color: #f4f4f5;
   font-feature-settings: "rlig" 1, "calt" 1;
   background-image: 
-    radial-gradient(at 15% 15%, rgba(147, 51, 234, 0.15) 0px, transparent 40%),
-    radial-gradient(at 85% 85%, rgba(236, 72, 153, 0.15) 0px, transparent 40%),
-    radial-gradient(at 50% 50%, rgba(59, 130, 246, 0.1) 0px, transparent 50%);
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.12), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(168, 85, 247, 0.06), transparent 70%);
   min-height: 100vh;
 }
 
-/* Custom scrollbars */
+/* Modern clean scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(15, 15, 20, 0.6);
+  background: rgba(9, 9, 11, 0.8);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(120, 120, 160, 0.3);
-  border-radius: 4px;
+  background: rgba(63, 63, 70, 0.5);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(168, 85, 247, 0.5);
+  background: rgba(113, 113, 122, 0.8);
 }
 
+/* Subtle modern text gradient */
 .gradient-text {
-  background: linear-gradient(135deg, #c084fc 0%, #f472b6 50%, #60a5fa 100%);
+  background: linear-gradient(135deg, #ffffff 0%, #e4e4e7 40%, #a855f7 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
-.neon-border {
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.15);
+.gradient-brand {
+  background: linear-gradient(135deg, #818cf8 0%, #c084fc 50%, #f472b6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
-.neon-border:hover {
-  border-color: rgba(236, 72, 153, 0.5);
-  box-shadow: 0 0 25px rgba(236, 72, 153, 0.25);
+/* Corporate Glass Card */
+.glass-panel {
+  background: rgba(24, 24, 27, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-panel-hover {
+  transition: all 0.2s ease-in-out;
+}
+
+.glass-panel-hover:hover {
+  background: rgba(24, 24, 27, 0.85);
+  border-color: rgba(168, 85, 247, 0.25);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
 }

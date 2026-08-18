@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { Lock, User, Key, LogIn, UserPlus, Loader2, KeyRound, ShieldCheck } from "lucide-react";
+import { Lock, User, Key, LogIn, UserPlus, Loader2, KeyRound, Music2 } from "lucide-react";
+import { useToast } from "@/components/ToastProvider";
 
 interface LockScreenProps {
   onLoginSuccess: (user: { id: string; username: string; isAdmin?: boolean }) => void;
 }
 
 export default function LockScreen({ onLoginSuccess }: LockScreenProps) {
+  const { toast } = useToast();
   const [mode, setMode] = useState<"login" | "register">("login");
 
   // Form fields
@@ -42,46 +44,46 @@ export default function LockScreen({ onLoginSuccess }: LockScreenProps) {
         throw new Error(data.error || "Échec de l'authentification.");
       }
 
+      toast.success(`Bienvenue, @${data.user.username} !`);
       onLoginSuccess(data.user);
     } catch (err: any) {
       setError(err.message || "Une erreur est survenue.");
+      toast.error(err.message || "Erreur d'authentification.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-2xl animate-fade-in">
-      <div className="w-full max-w-md rounded-3xl border border-purple-500/40 bg-slate-900/95 p-6 sm:p-8 shadow-2xl space-y-6 relative overflow-hidden">
-        {/* Glow decoration */}
-        <div className="absolute -top-16 -right-16 h-32 w-32 rounded-full bg-purple-600/30 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 -left-16 h-32 w-32 rounded-full bg-pink-600/30 blur-3xl pointer-events-none" />
-
-        {/* Header Badge */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-xl animate-in fade-in duration-200">
+      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 sm:p-8 shadow-2xl space-y-6 relative overflow-hidden backdrop-blur-2xl">
+        {/* Header Branding */}
         <div className="text-center space-y-3">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-500 text-white shadow-lg shadow-purple-500/40 mx-auto">
-            <Lock className="h-7 w-7" />
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600/10 border border-indigo-500/30 text-indigo-400 shadow-md shadow-indigo-500/10 mx-auto">
+            <Music2 className="h-6 w-6" />
           </div>
 
           <div className="space-y-1">
-            <h2 className="text-2xl font-black tracking-tight text-white">
-              SUPER SKIBIDI <span className="gradient-text">MP3</span> 🚽⚡
+            <h2 className="text-xl font-bold tracking-tight text-zinc-100">
+              Skibidi <span className="text-indigo-400">MP3 Studio</span>
             </h2>
-            <p className="text-xs font-semibold text-purple-300">
+            <p className="text-xs text-zinc-400">
               {mode === "login"
-                ? "Connexion requise pour débloquer le convertisseur"
-                : "Inscription par Code d'Invitation obligatoire"}
+                ? "Connectez-vous pour accéder au convertisseur haute fidélité"
+                : "Inscription sécurisée sur invitation"}
             </p>
           </div>
         </div>
 
         {/* Tabs Switcher */}
-        <div className="grid grid-cols-2 p-1 rounded-xl bg-slate-950/80 border border-slate-800">
+        <div className="grid grid-cols-2 p-1 rounded-xl bg-zinc-950 border border-zinc-800">
           <button
             type="button"
             onClick={() => { setMode("login"); setError(null); }}
-            className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              mode === "login" ? "bg-purple-600 text-white shadow-md" : "text-slate-400 hover:text-white"
+            className={`py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              mode === "login"
+                ? "bg-zinc-800 text-zinc-100 border border-zinc-700/80 shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
             <LogIn className="h-3.5 w-3.5" />
@@ -90,8 +92,10 @@ export default function LockScreen({ onLoginSuccess }: LockScreenProps) {
           <button
             type="button"
             onClick={() => { setMode("register"); setError(null); }}
-            className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              mode === "register" ? "bg-purple-600 text-white shadow-md" : "text-slate-400 hover:text-white"
+            className={`py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              mode === "register"
+                ? "bg-zinc-800 text-zinc-100 border border-zinc-700/80 shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
             <UserPlus className="h-3.5 w-3.5" />
@@ -101,24 +105,24 @@ export default function LockScreen({ onLoginSuccess }: LockScreenProps) {
 
         {/* Auth Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Nom d'utilisateur</label>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-zinc-300">Nom d'utilisateur</label>
             <div className="relative">
               <input
                 type="text"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Ex: SkibidiUser"
-                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 pl-10 text-xs text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none"
+                placeholder="ex: sebastien, alexandre..."
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 pl-10 text-xs text-zinc-100 placeholder-zinc-600 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
               />
-              <User className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+              <User className="absolute left-3.5 top-3 h-4 w-4 text-zinc-500" />
             </div>
           </div>
 
           {mode === "register" && (
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-zinc-300">
                 Code d'Invitation (Obligatoire)
               </label>
               <div className="relative">
@@ -127,17 +131,17 @@ export default function LockScreen({ onLoginSuccess }: LockScreenProps) {
                   required
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                  placeholder="Ex: SKIBIDI-A8F92C"
-                  className="w-full rounded-xl border border-amber-500/50 bg-slate-950/80 px-4 py-3 pl-10 font-mono text-xs font-bold text-amber-300 placeholder-slate-500 focus:border-amber-400 focus:outline-none"
+                  placeholder="ex: SKIBIDI-A8F92C"
+                  className="w-full rounded-xl border border-amber-500/40 bg-zinc-950 px-4 py-2.5 pl-10 font-mono text-xs font-semibold text-amber-300 placeholder-zinc-600 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 transition-all"
                 />
-                <KeyRound className="absolute left-3 top-3.5 h-4 w-4 text-amber-400" />
+                <KeyRound className="absolute left-3.5 top-3 h-4 w-4 text-amber-400" />
               </div>
-              <span className="text-[10px] text-slate-400 mt-1 block">Demandez un code d'invitation à l'administrateur.</span>
+              <span className="text-[11px] text-zinc-500">Demandez un code d'invitation à l'administrateur.</span>
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Mot de passe</label>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-zinc-300">Mot de passe</label>
             <div className="relative">
               <input
                 type="password"
@@ -145,14 +149,14 @@ export default function LockScreen({ onLoginSuccess }: LockScreenProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 pl-10 text-xs text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 pl-10 text-xs text-zinc-100 placeholder-zinc-600 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
               />
-              <Key className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+              <Key className="absolute left-3.5 top-3 h-4 w-4 text-zinc-500" />
             </div>
           </div>
 
           {error && (
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300 font-medium">
               {error}
             </div>
           )}
@@ -160,33 +164,24 @@ export default function LockScreen({ onLoginSuccess }: LockScreenProps) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 px-5 py-3.5 font-bold text-white shadow-lg shadow-purple-600/30 hover:brightness-110 active:scale-95 disabled:opacity-50 transition-all text-sm"
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50 transition-all mt-2"
           >
             {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Chargement...</span>
-              </>
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : mode === "login" ? (
-              <>
-                <LogIn className="h-4 w-4" />
-                <span>Se Connecter & Débloquer</span>
-              </>
+              <LogIn className="h-4 w-4" />
             ) : (
-              <>
-                <UserPlus className="h-4 w-4" />
-                <span>Valider le Code & S'inscrire</span>
-              </>
+              <UserPlus className="h-4 w-4" />
             )}
+            <span>{mode === "login" ? "Se Connecter" : "Créer mon Compte"}</span>
           </button>
         </form>
 
-        {/* Lock Notice */}
-        <div className="pt-3 border-t border-slate-800/80 text-center space-y-1">
-          <div className="inline-flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            <span>Accès privé restreint par code d'invitation</span>
-          </div>
+        <div className="pt-2 border-t border-zinc-800/80 text-center">
+          <p className="text-[11px] text-zinc-500 flex items-center justify-center gap-1.5">
+            <Lock className="h-3 w-3" />
+            <span>Accès privé et sécurisé par chiffrement de clé Scrypt</span>
+          </p>
         </div>
       </div>
     </div>

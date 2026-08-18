@@ -6,9 +6,8 @@ import LockScreen from "@/components/LockScreen";
 import ConverterForm from "@/components/ConverterForm";
 import PlaylistConverter from "@/components/PlaylistConverter";
 import UserDashboard, { SyncedHistoryItem } from "@/components/UserDashboard";
-import AdminPanel from "@/components/AdminPanel";
 import FeaturesGrid from "@/components/FeaturesGrid";
-import { Sparkles, Youtube, Music, Radio, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface UserProfile {
   id: string;
@@ -64,24 +63,24 @@ export default function Home() {
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
-        <div className="flex items-center gap-3 font-bold text-sm text-purple-400">
-          <Loader2 className="h-6 w-6 animate-spin text-pink-500" />
-          <span>Vérification de la session Super Skibidi MP3...</span>
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-100">
+        <div className="flex items-center gap-3 font-medium text-xs text-zinc-400">
+          <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+          <span>Chargement du studio média...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col antialiased bg-slate-950">
+    <div className="min-h-screen flex flex-col antialiased bg-zinc-950 text-zinc-100">
       <Navbar
         user={user}
         onLogout={handleLogout}
         onOpenAuth={() => setShowAuthModal(true)}
       />
 
-      {/* App Lock: Force login if not authenticated */}
+      {/* App Lock: Require auth */}
       {(!user || showAuthModal) && (
         <LockScreen
           onLoginSuccess={(loggedInUser) => {
@@ -92,45 +91,22 @@ export default function Home() {
         />
       )}
 
-      <main className="flex-1 container mx-auto px-4 py-8 sm:py-12 space-y-12">
+      <main className="flex-1 container mx-auto px-4 py-8 sm:py-12 space-y-12 max-w-5xl">
         {/* Hero Section */}
-        <section className="text-center space-y-4 max-w-3xl mx-auto">
-          <div className="inline-flex items-center gap-2 rounded-full border border-pink-500/30 bg-pink-500/10 px-4 py-1.5 text-xs font-bold text-pink-400">
-            <Sparkles className="h-4 w-4 animate-spin" />
-            <span>SUPER SKIBIDI EDITION • ACCÈS PRIVÉ & CODES D'INVITATION 🚽⚡</span>
+        <section className="text-center space-y-3.5 max-w-2xl mx-auto pt-2 sm:pt-4">
+          <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/80 px-3.5 py-1 text-xs font-medium text-zinc-300 shadow-sm">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Vidéo MP4 • Audio 320kbps • GIF • Images PNG</span>
           </div>
 
-          <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white leading-tight">
-            <span className="gradient-text">SUPER SKIBIDI MP3</span>
+          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-zinc-100 leading-tight">
+            Convertir & Télécharger tous vos médias
           </h1>
 
-          <p className="text-base sm:text-lg text-slate-300 font-medium">
-            Convertissez vos musiques en vraie qualité 320 kbps HD Studio. Vos téléchargements sont automatiquement sauvegardés dans votre compte pour les re-télécharger en 1 seul clic !
+          <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed max-w-lg mx-auto">
+            Téléchargez depuis YouTube, TikTok, Instagram, Twitter/X, Pinterest, Vimeo, Spotify et SoundCloud en MP4, MP3 320k ou PNG HD.
           </p>
-
-          {/* Source Badges */}
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <div className="flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-red-400">
-              <Youtube className="h-4 w-4 text-red-500" />
-              <span>YouTube & Shorts</span>
-            </div>
-            <div className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-emerald-400">
-              <Music className="h-4 w-4 text-emerald-500" />
-              <span>Spotify Track & Album</span>
-            </div>
-            <div className="flex items-center gap-1.5 rounded-xl border border-orange-500/30 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-orange-400">
-              <Radio className="h-4 w-4 text-orange-500" />
-              <span>SoundCloud HQ</span>
-            </div>
-          </div>
         </section>
-
-        {/* Admin Panel for Admin User */}
-        {user && user.isAdmin && (
-          <section>
-            <AdminPanel />
-          </section>
-        )}
 
         {/* Converter Form / Playlist Converter */}
         <section>
@@ -148,7 +124,7 @@ export default function Home() {
           )}
         </section>
 
-        {/* User Account Dashboard & History Re-downloader */}
+        {/* User Account Dashboard & History */}
         {user && (
           <UserDashboard
             user={user}
@@ -157,14 +133,14 @@ export default function Home() {
           />
         )}
 
-        {/* Unlocked Features Comparison Grid */}
+        {/* Features Grid */}
         <FeaturesGrid />
       </main>
 
-      <footer className="border-t border-slate-800 bg-slate-950/80 py-6 text-center text-xs text-slate-500">
-        <div className="container mx-auto px-4 space-y-2">
-          <p className="font-bold text-slate-400">
-            SUPER SKIBIDI MP3 🚽⚡ • Accès Privé Restreint (320kbps Studio)
+      <footer className="border-t border-zinc-800/80 bg-zinc-950 py-6 text-center text-xs text-zinc-500">
+        <div className="container mx-auto px-4 space-y-1">
+          <p className="font-medium text-zinc-400">
+            Skibidi MP3 • Studio Média Multi-Plateformes (MP4 / MP3 / PNG / GIF)
           </p>
         </div>
       </footer>

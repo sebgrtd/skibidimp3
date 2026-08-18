@@ -7,7 +7,7 @@ import NodeID3 from "node-id3";
 
 const PYTHON_PATH = process.env.PYTHON_PATH || (process.platform === "win32" ? `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe` : "python3");
 
-// Helper to detect YouTube bot-block / age-restriction errors (fail fast, don't retry)
+// Helper to detect YouTube bot-block
 function isYouTubeBlockedError(msg: string): boolean {
   return msg.includes("Sign in to confirm") ||
     msg.includes("not a bot") ||
@@ -15,20 +15,22 @@ function isYouTubeBlockedError(msg: string): boolean {
     msg.includes("Skipping unsupported client");
 }
 
+// Single attempt audio/video download with yt-dlp
 async function singleAttemptDownload(
   ytDlpCommand: string,
   ytDlpBaseArgs: string[],
   target: string,
   rawTemplate: string,
   extraFlags: string[],
-  userAgent: string
+  userAgent: string,
+  isVideo: boolean = false
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
+    const formatArg = isVideo ? ["-f", "bv*+ba/b", "--merge-output-format", "mp4"] : ["-f", "ba/b", "-x"];
     const args = [
       ...ytDlpBaseArgs,
       "--user-agent", userAgent,
-      "-f", "ba/b",
-      "-x",
+      ...formatArg,
       "-o", rawTemplate,
       "--no-playlist",
       ...extraFlags,
@@ -43,17 +45,15 @@ async function singleAttemptDownload(
     proc.on("close", () => {
       const dirFiles = fs.readdirSync(os.tmpdir());
       const rawPattern = path.basename(rawTemplate).split(".")[0];
-      // Only accept completed files (not .part files)
-      const match = dirFiles.find(f => f.startsWith(rawPattern) && !f.endsWith(".part"));
+      const match = dirFiles.find(f => f.startsWith(rawPattern) && !f.endsWith(".part") && !f.endsWith(".ytdl"));
 
       if (match) {
         resolve(path.join(os.tmpdir(), match));
       } else {
-        // Clean up any .part files left behind
         dirFiles.filter(f => f.startsWith(rawPattern)).forEach(f => {
           try { fs.unlinkSync(path.join(os.tmpdir(), f)); } catch {}
         });
-        reject(new Error(stderr.trim() || "yt-dlp failed"));
+        reject(new Error(stderr.trim() || "yt-dlp download failed"));
       }
     });
 
@@ -61,19 +61,18 @@ async function singleAttemptDownload(
   });
 }
 
-async function extractAudioStream(downloadUrl: string, rawTemplateBase: string): Promise<string> {
+async function extractMediaStream(downloadUrl: string, rawTemplateBase: string, isVideo: boolean = false): Promise<string> {
   const isModule = PYTHON_PATH.includes("python");
   const ytDlpCommand = isModule ? PYTHON_PATH : "yt-dlp";
   const ytDlpBaseArgs = isModule ? ["-m", "yt_dlp"] : [];
   const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
-  // Generate unique template per attempt to avoid partial file contamination
   const baseDir = path.dirname(rawTemplateBase);
   const baseName = path.basename(rawTemplateBase).replace(".%(ext)s", "");
 
   const attempt = async (suffix: string, flags: string[]) => {
     const tpl = path.join(baseDir, `${baseName}_${suffix}.%(ext)s`);
-    return singleAttemptDownload(ytDlpCommand, ytDlpBaseArgs, downloadUrl, tpl, flags, USER_AGENT);
+    return singleAttemptDownload(ytDlpCommand, ytDlpBaseArgs, downloadUrl, tpl, flags, USER_AGENT, isVideo);
   };
 
   // Attempt 1: android,web,tv
@@ -81,9 +80,7 @@ async function extractAudioStream(downloadUrl: string, rawTemplateBase: string):
     return await attempt("a1", ["--extractor-args", "youtube:player_client=android,web,tv"]);
   } catch (err1: any) {
     const msg1 = err1.message || "";
-    console.warn("Download attempt 1 failed:", msg1.split("\n")[0]);
 
-    // Fail fast: don't retry if YouTube is blocking us — let caller use SoundCloud
     if (isYouTubeBlockedError(msg1)) throw err1;
 
     // Attempt 2: tv_embedded
@@ -91,21 +88,17 @@ async function extractAudioStream(downloadUrl: string, rawTemplateBase: string):
       return await attempt("a2", ["--extractor-args", "youtube:player_client=tv_embedded,android,web"]);
     } catch (err2: any) {
       const msg2 = err2.message || "";
-      console.warn("Download attempt 2 failed:", msg2.split("\n")[0]);
-
       if (isYouTubeBlockedError(msg2)) throw err2;
 
       // Attempt 3: mweb
       try {
         return await attempt("a3", ["--extractor-args", "youtube:player_client=mweb,tv_embedded"]);
       } catch (err3: any) {
-        console.warn("Download attempt 3 failed:", err3.message?.split("\n")[0]);
         throw err3;
       }
     }
   }
 }
-
 
 export async function POST(req: NextRequest) {
   const tmpFiles: string[] = [];
@@ -128,9 +121,146 @@ export async function POST(req: NextRequest) {
     }
 
     const trimmedUrl = url.trim();
+    const lowerFormat = format.toLowerCase();
+    const isVideoDownload = lowerFormat === "mp4";
+    const isGifDownload = lowerFormat === "gif";
+    const isImageDownload = lowerFormat === "png" || lowerFormat === "jpg" || lowerFormat === "jpeg";
+
+    const uniqueId = Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+    const outPath = path.join(os.tmpdir(), `out_${uniqueId}.${lowerFormat}`);
+    tmpFiles.push(outPath);
+
+    // ==========================================
+    // 1. IMAGE DOWNLOAD (PNG / JPG)
+    // ==========================================
+    if (isImageDownload) {
+      const imageUrl = metadata.coverUrl || trimmedUrl;
+      const imgRes = await fetch(imageUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+      });
+
+      if (!imgRes.ok) {
+        throw new Error("Impossible de récupérer l'image source.");
+      }
+
+      const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+      fs.writeFileSync(outPath, imgBuffer);
+
+      const fileStat = fs.statSync(outPath);
+      const fileStream = fs.createReadStream(outPath);
+
+      const cleanTitle = (metadata.title || "image").replace(/[^a-zA-Z0-9_\-\. ]/g, "").trim();
+      const fileName = `${cleanTitle}.${lowerFormat === "jpeg" ? "jpg" : lowerFormat}`;
+
+      const headers = new Headers();
+      headers.set("Content-Disposition", `attachment; filename="${encodeURIComponent(fileName)}"`);
+      headers.set("Content-Type", lowerFormat === "png" ? "image/png" : "image/jpeg");
+      headers.set("Content-Length", String(fileStat.size));
+
+      fileStream.on("end", () => {
+        tmpFiles.forEach((file) => {
+          if (fs.existsSync(file)) {
+            try { fs.unlinkSync(file); } catch {}
+          }
+        });
+      });
+
+      return new NextResponse(fileStream as any, { headers });
+    }
+
+    // ==========================================
+    // 2. VIDEO DOWNLOAD (MP4) OR GIF ANIMATION
+    // ==========================================
+    if (isVideoDownload || isGifDownload) {
+      const rawPattern = `raw_vid_${uniqueId}`;
+      const rawTemplate = path.join(os.tmpdir(), `${rawPattern}.%(ext)s`);
+
+      let downloadedRaw = "";
+      // If direct video url passed (e.g. from Twitter/Pinterest)
+      if (trimmedUrl.startsWith("http") && (trimmedUrl.includes(".mp4") || trimmedUrl.includes("video.twimg.com") || trimmedUrl.includes("v.pinimg.com"))) {
+        const vidRes = await fetch(trimmedUrl);
+        if (!vidRes.ok) throw new Error("Impossible de télécharger le flux vidéo direct.");
+        const directPath = path.join(os.tmpdir(), `${rawPattern}.mp4`);
+        fs.writeFileSync(directPath, Buffer.from(await vidRes.arrayBuffer()));
+        downloadedRaw = directPath;
+        tmpFiles.push(downloadedRaw);
+      } else {
+        downloadedRaw = await extractMediaStream(trimmedUrl, rawTemplate, true);
+        tmpFiles.push(downloadedRaw);
+      }
+
+      // FFmpeg processing for Video / GIF
+      const ffmpegArgs: string[] = ["-y"];
+
+      if (startTime && !isNaN(Number(startTime)) && Number(startTime) > 0) {
+        ffmpegArgs.push("-ss", String(startTime));
+      }
+
+      ffmpegArgs.push("-i", downloadedRaw);
+
+      if (endTime && !isNaN(Number(endTime)) && Number(endTime) > 0) {
+        ffmpegArgs.push("-to", String(endTime));
+      }
+
+      if (isGifDownload) {
+        // High quality palette-based GIF conversion
+        ffmpegArgs.push(
+          "-vf", "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+          "-loop", "0",
+          outPath
+        );
+      } else {
+        // Universal MP4 H.264 / AAC conversion with faststart for instant streaming
+        ffmpegArgs.push(
+          "-c:v", "libx264",
+          "-preset", "fast",
+          "-crf", "22",
+          "-c:a", "aac",
+          "-b:a", "192k",
+          "-movflags", "+faststart",
+          outPath
+        );
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const proc = spawn("ffmpeg", ffmpegArgs);
+        let stderr = "";
+        proc.stderr.on("data", (chunk) => stderr += chunk.toString());
+        proc.on("close", (code) => {
+          if (code === 0 && fs.existsSync(outPath)) resolve();
+          else reject(new Error(`Erreur conversion vidéo FFmpeg: ${stderr || `code ${code}`}`));
+        });
+        proc.on("error", (err) => reject(err));
+      });
+
+      const fileStat = fs.statSync(outPath);
+      const fileStream = fs.createReadStream(outPath);
+
+      const cleanTitle = (metadata.title || "video").replace(/[^a-zA-Z0-9_\-\. ]/g, "").trim();
+      const cleanArtist = (metadata.artist || "").replace(/[^a-zA-Z0-9_\-\. ]/g, "").trim();
+      const fileName = cleanArtist ? `${cleanArtist} - ${cleanTitle}.${lowerFormat}` : `${cleanTitle}.${lowerFormat}`;
+
+      const headers = new Headers();
+      headers.set("Content-Disposition", `attachment; filename="${encodeURIComponent(fileName)}"`);
+      headers.set("Content-Type", isGifDownload ? "image/gif" : "video/mp4");
+      headers.set("Content-Length", String(fileStat.size));
+
+      fileStream.on("end", () => {
+        tmpFiles.forEach((file) => {
+          if (fs.existsSync(file)) {
+            try { fs.unlinkSync(file); } catch {}
+          }
+        });
+      });
+
+      return new NextResponse(fileStream as any, { headers });
+    }
+
+    // ==========================================
+    // 3. AUDIO DOWNLOAD (MP3, FLAC, WAV, M4A, OGG)
+    // ==========================================
     let downloadTargetUrl = trimmedUrl;
 
-    // Handle Spotify links or YouTube search results: Use SoundCloud search to bypass DRM and YouTube bot-blocks
     if (trimmedUrl.includes("spotify.com") || trimmedUrl.includes("open.spotify.com") || trimmedUrl.includes("results?search_query=")) {
       const searchTerms = [metadata.artist, metadata.title].filter(Boolean).join(" ");
       if (searchTerms.trim()) {
@@ -139,48 +269,32 @@ export async function POST(req: NextRequest) {
         const queryMatch = trimmedUrl.match(/search_query=([^&]+)/);
         if (queryMatch) {
           downloadTargetUrl = `scsearch5:${decodeURIComponent(queryMatch[1].replace(/\+/g, " "))}`;
-        } else {
-          const trackMatch = trimmedUrl.match(/(?:track|album|playlist)\/([a-zA-Z0-9]+)/);
-          if (trackMatch) {
-            downloadTargetUrl = `scsearch5:spotify ${trackMatch[1]}`;
-          }
         }
       }
     }
 
-    // If the URL is a YouTube URL coming from Spotify info page, also try SoundCloud first
-    if (downloadTargetUrl.includes("youtube.com") && metadata.artist && metadata.title) {
-      // Keep YouTube URL but will fallback to SoundCloud if it fails
-    }
-
-    const uniqueId = Date.now() + "_" + Math.random().toString(36).substring(2, 9);
-    const rawPattern = `raw_${uniqueId}`;
+    const rawPattern = `raw_aud_${uniqueId}`;
     const rawTemplate = path.join(os.tmpdir(), `${rawPattern}.%(ext)s`);
-    const outPath = path.join(os.tmpdir(), `out_${uniqueId}.${format}`);
-    tmpFiles.push(outPath);
 
-    // 1. Run yt-dlp to extract raw audio stream
     let downloadedRaw = "";
     try {
-      downloadedRaw = await extractAudioStream(downloadTargetUrl, rawTemplate);
+      downloadedRaw = await extractMediaStream(downloadTargetUrl, rawTemplate, false);
       tmpFiles.push(downloadedRaw);
     } catch (extractErr: any) {
       const searchTitle = metadata.title || "music";
       const searchArtist = metadata.artist || "";
       const searchTerms = `${searchArtist} ${searchTitle}`.trim();
 
-      // Ultimate fallback: Use SoundCloud scsearch5 which automatically skips DRM previews
-      console.log("Tentative de secours ultime via SoundCloud scsearch5:", searchTerms);
+      console.log("Tentative de secours audio via SoundCloud scsearch5:", searchTerms);
       try {
-        downloadedRaw = await extractAudioStream(`scsearch5:${searchTerms}`, rawTemplate);
+        downloadedRaw = await extractMediaStream(`scsearch5:${searchTerms}`, rawTemplate, false);
         tmpFiles.push(downloadedRaw);
       } catch (scErr: any) {
-        console.error("SoundCloud fallback failed:", scErr.message);
         throw extractErr;
       }
     }
 
-    // 2. FFmpeg processing
+    // FFmpeg Audio Processing
     const ffmpegArgs: string[] = ["-y"];
 
     if (startTime && !isNaN(Number(startTime)) && Number(startTime) > 0) {
@@ -206,7 +320,7 @@ export async function POST(req: NextRequest) {
       ffmpegArgs.push("-af", afFilters.join(","));
     }
 
-    switch (format.toLowerCase()) {
+    switch (lowerFormat) {
       case "flac":
         ffmpegArgs.push("-c:a", "flac");
         break;
@@ -239,13 +353,13 @@ export async function POST(req: NextRequest) {
       proc.stderr.on("data", (chunk) => stderr += chunk.toString());
       proc.on("close", (code) => {
         if (code === 0 && fs.existsSync(outPath)) resolve();
-        else reject(new Error(`Erreur conversion FFmpeg: ${stderr || `code ${code}`}`));
+        else reject(new Error(`Erreur conversion audio FFmpeg: ${stderr || `code ${code}`}`));
       });
       proc.on("error", (err) => reject(err));
     });
 
-    // 3. ID3 Cover Image Embedding for MP3
-    if (format.toLowerCase() === "mp3" && metadata.coverUrl) {
+    // ID3 Cover Image for MP3
+    if (lowerFormat === "mp3" && metadata.coverUrl) {
       try {
         const imgRes = await fetch(metadata.coverUrl);
         if (imgRes.ok) {
@@ -266,20 +380,20 @@ export async function POST(req: NextRequest) {
           NodeID3.write(tags, outPath);
         }
       } catch (imgErr) {
-        console.error("Erreur d'insertion de pochette ID3:", imgErr);
+        console.error("Erreur insertion pochette ID3:", imgErr);
       }
     }
 
     const fileStat = fs.statSync(outPath);
     const fileStream = fs.createReadStream(outPath);
 
-    const headers = new Headers();
     const cleanTitle = (metadata.title || "audio").replace(/[^a-zA-Z0-9_\-\. ]/g, "").trim();
     const cleanArtist = (metadata.artist || "").replace(/[^a-zA-Z0-9_\-\. ]/g, "").trim();
-    const fileName = cleanArtist ? `${cleanArtist} - ${cleanTitle}.${format}` : `${cleanTitle}.${format}`;
+    const fileName = cleanArtist ? `${cleanArtist} - ${cleanTitle}.${lowerFormat}` : `${cleanTitle}.${lowerFormat}`;
 
+    const headers = new Headers();
     headers.set("Content-Disposition", `attachment; filename="${encodeURIComponent(fileName)}"`);
-    headers.set("Content-Type", `audio/${format === "mp3" ? "mpeg" : format}`);
+    headers.set("Content-Type", `audio/${lowerFormat === "mp3" ? "mpeg" : lowerFormat}`);
     headers.set("Content-Length", String(fileStat.size));
 
     fileStream.on("end", () => {
@@ -290,44 +404,7 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    let isClosed = false;
-    const readableStream = new ReadableStream({
-      start(controller) {
-        fileStream.on("data", (chunk) => {
-          if (!isClosed) {
-            try {
-              controller.enqueue(chunk);
-            } catch {
-              isClosed = true;
-            }
-          }
-        });
-
-        fileStream.on("end", () => {
-          if (!isClosed) {
-            isClosed = true;
-            try {
-              controller.close();
-            } catch {}
-          }
-        });
-
-        fileStream.on("error", (err) => {
-          if (!isClosed) {
-            isClosed = true;
-            try {
-              controller.error(err);
-            } catch {}
-          }
-        });
-      },
-      cancel() {
-        isClosed = true;
-        fileStream.destroy();
-      },
-    });
-
-    return new NextResponse(readableStream, { headers });
+    return new NextResponse(fileStream as any, { headers });
 
   } catch (error: any) {
     console.error("Erreur API /download:", error);
@@ -338,7 +415,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(
-      { error: error.message || "Une erreur est survenue lors de la génération de votre fichier audio." },
+      { error: error.message || "Une erreur est survenue lors de la génération du fichier." },
       { status: 500 }
     );
   }

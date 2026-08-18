@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { 
   Download, 
   Sparkles, 
@@ -13,12 +13,18 @@ import {
   Radio, 
   AlertCircle,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Video,
+  Image as ImageIcon,
+  Film
 } from "lucide-react";
 import { formatTime } from "@/lib/utils";
+import { useToast } from "@/components/ToastProvider";
 
-interface MediaInfo {
-  platform: "youtube" | "spotify" | "soundcloud" | "generic";
+export interface MediaInfo {
+  platform: "youtube" | "spotify" | "soundcloud" | "vimeo" | "instagram" | "tiktok" | "pinterest" | "twitter" | "generic";
   isPlaylist: boolean;
   id?: string;
   title: string;
@@ -29,6 +35,11 @@ interface MediaInfo {
   originalUrl?: string;
   totalTracks?: number;
   entries?: any[];
+  mediaType?: "video" | "audio" | "image" | "mixed" | "gif";
+  hasVideo?: boolean;
+  hasAudio?: boolean;
+  hasImage?: boolean;
+  availableFormats?: string[];
 }
 
 interface ConverterFormProps {
@@ -37,10 +48,14 @@ interface ConverterFormProps {
 }
 
 export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: ConverterFormProps) {
+  const { toast } = useToast();
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [mediaInfo, setMediaInfo] = useState<MediaInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Mode Selection: "video" | "audio" | "image" | "gif"
+  const [selectedMode, setSelectedMode] = useState<"video" | "audio" | "image" | "gif">("audio");
 
   // Settings
   const [format, setFormat] = useState("mp3");
@@ -78,10 +93,10 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
         body: JSON.stringify({ url: url.trim() }),
       });
 
-      const data = await res.json();
+      const data: MediaInfo = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Erreur lors de la récupération des données.");
+        throw new Error((data as any).error || "Erreur lors de la récupération des données.");
       }
 
       if (data.isPlaylist) {
@@ -94,14 +109,38 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
         setMediaInfo(data);
         setEditTitle(data.title || "");
         setEditArtist(data.artist || "");
-        setEditAlbum("Super Skibidi MP3");
+        setEditAlbum("Skibidi Studio");
         setEndTime(String(Math.floor(data.duration || 0)));
+
+        // Automatically select the best default mode
+        if (data.mediaType === "image" || data.hasImage && !data.hasVideo) {
+          setSelectedMode("image");
+          setFormat("png");
+        } else if (data.hasVideo && (data.platform === "tiktok" || data.platform === "instagram" || data.platform === "vimeo")) {
+          setSelectedMode("video");
+          setFormat("mp4");
+        } else {
+          setSelectedMode("audio");
+          setFormat("mp3");
+        }
+
+        toast.info("Média analysé avec succès.");
       }
     } catch (err: any) {
-      setError(err.message || "Impossible de charger la vidéo. Vérifiez le lien.");
+      const errMsg = err.message || "Impossible de charger ce lien. Vérifiez l'URL.";
+      setError(errMsg);
+      toast.error(errMsg);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleModeChange = (mode: "video" | "audio" | "image" | "gif") => {
+    setSelectedMode(mode);
+    if (mode === "video") setFormat("mp4");
+    else if (mode === "image") setFormat("png");
+    else if (mode === "gif") setFormat("gif");
+    else if (mode === "audio") setFormat("mp3");
   };
 
   const handleDownload = async () => {
@@ -109,24 +148,36 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
 
     setDownloading(true);
     setDownloadPercent(5);
-    setDownloadProgress("Connexion au flux audio HD...");
 
-    // Simulated smooth progress interval
+    const isVideo = format === "mp4";
+    const isImage = format === "png" || format === "jpg";
+    const isGif = format === "gif";
+
+    setDownloadProgress(
+      isImage 
+        ? "Récupération de l'image haute définition..." 
+        : isVideo 
+          ? "Extraction du flux vidéo HD (1080p)..." 
+          : isGif 
+            ? "Génération du GIF animé..." 
+            : "Connexion au flux audio HD..."
+    );
+
     const progressInterval = setInterval(() => {
       setDownloadPercent((prev) => {
         if (prev < 30) {
-          setDownloadProgress("Connexion au flux source & analyse du codec...");
-          return prev + 5;
-        } else if (prev < 70) {
-          setDownloadProgress("Extraction audio & Traitement FFmpeg (320kbps)...");
-          return prev + 3;
-        } else if (prev < 92) {
-          setDownloadProgress("Injection des métadonnées ID3 & Pochette HD...");
+          setDownloadProgress(isImage ? "Traitement image..." : isVideo ? "Téléchargement flux vidéo..." : "Connexion flux source...");
+          return prev + (isImage ? 25 : 5);
+        } else if (prev < 75) {
+          setDownloadProgress(isImage ? "Finalisation PNG..." : isVideo ? "Encodage vidéo MP4..." : "Conversion 320kbps...");
+          return prev + (isImage ? 20 : 3);
+        } else if (prev < 95) {
+          setDownloadProgress("Finalisation du fichier...");
           return prev + 1.5;
         }
         return prev;
       });
-    }, 400);
+    }, 350);
 
     try {
       const payload = {
@@ -177,6 +228,8 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
       a.remove();
       window.URL.revokeObjectURL(blobUrl);
 
+      toast.success(`Téléchargement de « ${cleanTitle} » réussi !`);
+
       // Save to user account history
       try {
         await fetch("/api/user/history", {
@@ -187,7 +240,7 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
             artist: editArtist || mediaInfo.artist,
             thumbnail: mediaInfo.thumbnail,
             format,
-            bitrate,
+            bitrate: isVideo ? "1080p" : isImage ? "HD" : bitrate,
             url: mediaInfo.originalUrl || mediaInfo.url,
           }),
         });
@@ -200,16 +253,18 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
           artist: editArtist || mediaInfo.artist,
           thumbnail: mediaInfo.thumbnail,
           format,
-          bitrate,
+          bitrate: isVideo ? "1080p" : isImage ? "HD" : bitrate,
           date: new Date().toLocaleDateString(),
           url: mediaInfo.originalUrl || mediaInfo.url,
         });
       }
 
-      await new Promise((r) => setTimeout(r, 1200));
+      await new Promise((r) => setTimeout(r, 1000));
     } catch (err: any) {
       clearInterval(progressInterval);
-      setError(err.message || "Une erreur est survenue pendant le téléchargement.");
+      const errMsg = err.message || "Une erreur est survenue pendant le téléchargement.";
+      setError(errMsg);
+      toast.error(errMsg);
     } finally {
       clearInterval(progressInterval);
       setDownloading(false);
@@ -220,37 +275,53 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
 
   const getPlatformIcon = (p?: string) => {
     switch (p) {
-      case "youtube": return <Youtube className="h-5 w-5 text-red-500" />;
-      case "spotify": return <Music className="h-5 w-5 text-emerald-500" />;
-      case "soundcloud": return <Radio className="h-5 w-5 text-orange-500" />;
-      default: return <Sparkles className="h-5 w-5 text-purple-400" />;
+      case "youtube": return <Youtube className="h-4 w-4 text-red-500" />;
+      case "spotify": return <Music className="h-4 w-4 text-emerald-400" />;
+      case "soundcloud": return <Radio className="h-4 w-4 text-orange-400" />;
+      case "vimeo": return <Video className="h-4 w-4 text-sky-400" />;
+      case "tiktok": return <Film className="h-4 w-4 text-pink-400" />;
+      case "instagram": return <Film className="h-4 w-4 text-rose-400" />;
+      case "twitter": return <span className="font-bold text-zinc-200">𝕏</span>;
+      case "pinterest": return <ImageIcon className="h-4 w-4 text-red-400" />;
+      default: return <Sparkles className="h-4 w-4 text-indigo-400" />;
     }
   };
 
+  const detectPlatformFromUrl = (raw: string) => {
+    const l = raw.toLowerCase();
+    if (l.includes("spotify")) return "spotify";
+    if (l.includes("soundcloud")) return "soundcloud";
+    if (l.includes("vimeo")) return "vimeo";
+    if (l.includes("tiktok")) return "tiktok";
+    if (l.includes("instagram")) return "instagram";
+    if (l.includes("twitter") || l.includes("x.com")) return "twitter";
+    if (l.includes("pinterest") || l.includes("pin.it")) return "pinterest";
+    if (l.includes("youtu")) return "youtube";
+    return undefined;
+  };
+
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6">
-      {/* Input Card */}
-      <div className="relative rounded-2xl border border-purple-500/30 bg-slate-900/90 p-4 sm:p-6 shadow-2xl backdrop-blur-xl transition-all hover:border-purple-500/50">
-        <form onSubmit={handleFetchInfo} className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
+    <div className="w-full max-w-3xl mx-auto space-y-6">
+      {/* Search & URL Input Card */}
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 sm:p-5 shadow-xl backdrop-blur-xl transition-all hover:border-zinc-700">
+        <form onSubmit={handleFetchInfo} className="space-y-3">
+          <div className="flex flex-col sm:flex-row gap-2.5">
             <div className="relative flex-1">
               <input
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="Collez ici un lien YouTube, YouTube Shorts, Spotify ou SoundCloud..."
-                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3.5 pl-11 pr-24 text-sm text-slate-100 placeholder-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                placeholder="Collez une URL YouTube, TikTok, Instagram, Twitter/X, Pinterest, Vimeo, Spotify..."
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 pl-10 pr-20 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
               />
-              <div className="absolute left-3.5 top-3.5 text-slate-400">
-                {getPlatformIcon(
-                  url.includes("spotify") ? "spotify" : url.includes("soundcloud") ? "soundcloud" : url.includes("youtu") ? "youtube" : undefined
-                )}
+              <div className="absolute left-3.5 top-3.5 text-zinc-500 flex items-center justify-center">
+                {getPlatformIcon(detectPlatformFromUrl(url))}
               </div>
               {url && (
                 <button
                   type="button"
                   onClick={() => setUrl("")}
-                  className="absolute right-3 top-3 rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-400 hover:text-white"
+                  className="absolute right-3 top-2.5 rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
                 >
                   Effacer
                 </button>
@@ -260,17 +331,17 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
             <button
               type="submit"
               disabled={loading || !url.trim()}
-              className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-600/30 transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
+              className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-5 py-3 text-xs sm:text-sm font-semibold text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50 transition-all shrink-0"
             >
               {loading ? (
                 <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   <span>Analyse...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="h-5 w-5" />
-                  <span>Extraire Audio</span>
+                  <Sparkles className="h-4 w-4" />
+                  <span>Analyser le Média</span>
                 </>
               )}
             </button>
@@ -278,19 +349,19 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
         </form>
 
         {error && (
-          <div className="mt-4 flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-sm text-red-300">
-            <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
+          <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300 font-medium">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
             <span>{error}</span>
           </div>
         )}
       </div>
 
-      {/* Media Card Details */}
+      {/* Media Details Card */}
       {mediaInfo && !mediaInfo.isPlaylist && (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 sm:p-7 shadow-2xl space-y-6">
-          <div className="flex flex-col md:flex-row gap-6 items-center md:items-start">
-            {/* Thumbnail */}
-            <div className="relative group shrink-0 w-48 h-48 rounded-xl overflow-hidden border border-slate-700 bg-slate-950 shadow-md">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 sm:p-6 shadow-xl space-y-6">
+          <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start">
+            {/* Thumbnail / Media Preview */}
+            <div className="relative group shrink-0 w-36 h-36 sm:w-40 sm:h-40 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 shadow-md">
               {mediaInfo.thumbnail ? (
                 <img
                   src={mediaInfo.thumbnail}
@@ -298,13 +369,13 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-purple-950/40 text-purple-400">
-                  <Music className="h-12 w-12" />
+                <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-zinc-600">
+                  <Music className="h-10 w-10" />
                 </div>
               )}
 
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <span className="text-xs font-bold text-white bg-purple-600/90 px-3 py-1.5 rounded-full backdrop-blur-sm flex items-center gap-1">
+              <div className="absolute top-2 left-2">
+                <span className="text-[10px] font-semibold text-zinc-300 bg-zinc-950/80 border border-zinc-700/60 px-2 py-0.5 rounded-md backdrop-blur-sm flex items-center gap-1">
                   {getPlatformIcon(mediaInfo.platform)}
                   {mediaInfo.platform.toUpperCase()}
                 </span>
@@ -312,61 +383,134 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
             </div>
 
             {/* Info Metadata */}
-            <div className="flex-1 space-y-4 text-center md:text-left w-full">
+            <div className="flex-1 space-y-3.5 text-center sm:text-left w-full min-w-0">
               <div className="space-y-1">
-                <div className="flex items-center justify-center md:justify-start gap-2">
-                  <span className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2.5 py-0.5 text-xs font-medium text-purple-300">
-                    320 Kbps HD Disponible
+                <div className="flex items-center justify-center sm:justify-start gap-2">
+                  <span className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] font-medium text-indigo-300">
+                    {mediaInfo.hasVideo ? "Vidéo HD Disponible" : mediaInfo.hasImage ? "Image HD Disponible" : "Audio 320 kbps Studio"}
                   </span>
                   {mediaInfo.duration ? (
-                    <span className="rounded-md border border-slate-700 bg-slate-800 px-2.5 py-0.5 text-xs font-mono text-slate-300">
+                    <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-[11px] font-mono text-zinc-400">
                       {formatTime(mediaInfo.duration)}
                     </span>
                   ) : null}
                 </div>
-                <h2 className="text-xl font-bold text-white line-clamp-2">{editTitle || mediaInfo.title}</h2>
-                <p className="text-sm font-medium text-purple-400">{editArtist || mediaInfo.artist}</p>
+                <h2 className="text-base sm:text-lg font-bold text-zinc-100 line-clamp-2">{editTitle || mediaInfo.title}</h2>
+                <p className="text-xs font-medium text-zinc-400 truncate">{editArtist || mediaInfo.artist}</p>
               </div>
 
-              {/* Main Download Button */}
-              <div className="pt-2 flex flex-col sm:flex-row gap-3 items-center">
+              {/* Format Selection Switcher Tabs */}
+              <div className="flex items-center justify-center sm:justify-start gap-1.5 p-1 rounded-xl bg-zinc-950 border border-zinc-800">
+                {/* Audio Tab */}
+                {(mediaInfo.hasAudio || mediaInfo.platform === "spotify" || mediaInfo.platform === "soundcloud") && (
+                  <button
+                    type="button"
+                    onClick={() => handleModeChange("audio")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      selectedMode === "audio"
+                        ? "bg-zinc-800 text-zinc-100 border border-zinc-700 shadow-sm"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Music className="h-3.5 w-3.5 text-indigo-400" />
+                    <span>Audio (MP3 / FLAC)</span>
+                  </button>
+                )}
+
+                {/* Video Tab */}
+                {mediaInfo.hasVideo && (
+                  <button
+                    type="button"
+                    onClick={() => handleModeChange("video")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      selectedMode === "video"
+                        ? "bg-zinc-800 text-zinc-100 border border-zinc-700 shadow-sm"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Video className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Vidéo (MP4)</span>
+                  </button>
+                )}
+
+                {/* GIF Tab */}
+                {(mediaInfo.platform === "twitter" || (mediaInfo.hasVideo && (mediaInfo.duration || 0) <= 60)) && (
+                  <button
+                    type="button"
+                    onClick={() => handleModeChange("gif")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      selectedMode === "gif"
+                        ? "bg-zinc-800 text-zinc-100 border border-zinc-700 shadow-sm"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Film className="h-3.5 w-3.5 text-amber-400" />
+                    <span>GIF</span>
+                  </button>
+                )}
+
+                {/* Image Tab */}
+                {(mediaInfo.hasImage || mediaInfo.platform === "pinterest" || mediaInfo.platform === "twitter") && (
+                  <button
+                    type="button"
+                    onClick={() => handleModeChange("image")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      selectedMode === "image"
+                        ? "bg-zinc-800 text-zinc-100 border border-zinc-700 shadow-sm"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <ImageIcon className="h-3.5 w-3.5 text-pink-400" />
+                    <span>Image (PNG)</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-1 flex flex-col sm:flex-row gap-2.5 items-center">
                 <button
                   onClick={handleDownload}
                   disabled={downloading}
-                  className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 px-8 py-4 text-base font-extrabold text-white shadow-lg shadow-emerald-500/25 transition-all hover:scale-[1.01] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+                  className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-6 py-3 text-xs sm:text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 disabled:opacity-50 transition-all"
                 >
                   {downloading ? (
                     <>
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      <span>{downloadProgress || "Traitement en cours..."}</span>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>{downloadProgress || "Traitement..."}</span>
                     </>
                   ) : (
                     <>
-                      <Download className="h-5 w-5" />
-                      <span>Télécharger ({format.toUpperCase()} - {bitrate})</span>
+                      <Download className="h-4 w-4" />
+                      <span>
+                        Télécharger en {format.toUpperCase()}
+                        {selectedMode === "audio" ? ` (${bitrate})` : selectedMode === "video" ? " (HD)" : ""}
+                      </span>
                     </>
                   )}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => setShowSettings(!showSettings)}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-5 py-4 text-sm font-semibold text-slate-200 hover:bg-slate-700"
-                >
-                  <Sliders className="h-4 w-4 text-purple-400" />
-                  <span>{showSettings ? "Masquer Réglages" : "Réglages Avancés & Tags"}</span>
-                </button>
+                {selectedMode === "audio" && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSettings(!showSettings)}
+                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-xs font-semibold text-zinc-300 hover:bg-zinc-700 transition-colors"
+                  >
+                    <Sliders className="h-3.5 w-3.5 text-zinc-400" />
+                    <span>{showSettings ? "Masquer" : "Réglages & Tags"}</span>
+                    {showSettings ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
+                )}
               </div>
 
-              {/* Real-time Animated Download Progress Bar */}
+              {/* Download Progress Bar */}
               {downloading && (
-                <div className="mt-4 p-4 rounded-xl border border-purple-500/30 bg-slate-950/90 shadow-xl space-y-2.5 animate-fade-in">
+                <div className="mt-3 p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/80 shadow-lg space-y-2 animate-in fade-in duration-150">
                   <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 text-purple-300 font-medium truncate">
+                    <div className="flex items-center gap-2 text-zinc-300 font-medium truncate">
                       {downloadPercent >= 100 ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                       ) : (
-                        <Loader2 className="h-4 w-4 text-purple-400 animate-spin shrink-0" />
+                        <Loader2 className="h-3.5 w-3.5 text-indigo-400 animate-spin shrink-0" />
                       )}
                       <span className="truncate">{downloadProgress}</span>
                     </div>
@@ -375,174 +519,160 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
                     </span>
                   </div>
 
-                  {/* Progress track */}
-                  <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                  <div className="w-full h-2 bg-zinc-900 rounded-full overflow-hidden p-0.5 border border-zinc-800">
                     <div 
-                      className="h-full rounded-full bg-gradient-to-r from-purple-600 via-pink-500 to-emerald-400 transition-all duration-300 shadow-sm shadow-purple-500/50 relative overflow-hidden"
+                      className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all duration-300 relative overflow-hidden"
                       style={{ width: `${Math.min(100, Math.max(5, downloadPercent))}%` }}
                     >
                       <div className="absolute inset-0 bg-white/20 animate-pulse" />
                     </div>
-                  </div>
-
-                  {/* Step hints */}
-                  <div className="flex justify-between text-[10px] text-slate-500 font-mono px-0.5 pt-0.5">
-                    <span className={downloadPercent >= 10 ? "text-purple-400 font-bold" : ""}>1. Connexion</span>
-                    <span className={downloadPercent >= 45 ? "text-purple-400 font-bold" : ""}>2. Extraction 320k</span>
-                    <span className={downloadPercent >= 80 ? "text-pink-400 font-bold" : ""}>3. ID3 & Pochette</span>
-                    <span className={downloadPercent >= 100 ? "text-emerald-400 font-bold" : ""}>4. Téléchargement</span>
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Collapsible Advanced Settings Panel */}
-          {showSettings && (
-            <div className="pt-6 border-t border-slate-800 space-y-6 animate-accordion-down">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-purple-400 flex items-center gap-2">
-                <Sliders className="h-4 w-4" />
-                <span>Options Premium Unlocked</span>
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Format & Bitrate */}
-                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4">
-                  <h4 className="text-xs font-bold text-slate-300 uppercase">Format & Qualité Audio</h4>
-                  <div className="grid grid-cols-2 gap-3">
+          {/* Advanced Settings & Metadata Panel (Audio mode) */}
+          {showSettings && selectedMode === "audio" && (
+            <div className="pt-5 border-t border-zinc-800 space-y-5 animate-in fade-in duration-150">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Format & Quality */}
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 space-y-3">
+                  <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Format & Débit</h4>
+                  <div className="grid grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Format</label>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Format</label>
                       <select
                         value={format}
                         onChange={(e) => setFormat(e.target.value)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-white focus:border-purple-500"
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
                       >
-                        <option value="mp3">MP3 (Universel)</option>
+                        <option value="mp3">MP3</option>
                         <option value="flac">FLAC (Lossless)</option>
-                        <option value="wav">WAV (Sans compression)</option>
-                        <option value="m4a">M4A (AAC Apple)</option>
-                        <option value="ogg">OGG Vorbis</option>
+                        <option value="wav">WAV</option>
+                        <option value="m4a">M4A (AAC)</option>
+                        <option value="ogg">OGG</option>
                       </select>
                     </div>
 
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Débit (Bitrate)</label>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Débit (Bitrate)</label>
                       <select
                         value={bitrate}
                         onChange={(e) => setBitrate(e.target.value)}
                         disabled={format === "flac" || format === "wav"}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-white focus:border-purple-500 disabled:opacity-40"
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none disabled:opacity-40"
                       >
-                        <option value="320k">320 kbps (HD Studio)</option>
-                        <option value="256k">256 kbps (Très Élevé)</option>
-                        <option value="192k">192 kbps (Standard)</option>
-                        <option value="128k">128 kbps (Économique)</option>
+                        <option value="320k">320 kbps (HD)</option>
+                        <option value="256k">256 kbps</option>
+                        <option value="192k">192 kbps</option>
+                        <option value="128k">128 kbps</option>
                       </select>
                     </div>
                   </div>
                 </div>
 
-                {/* Volume Boost & Filters */}
-                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4">
-                  <h4 className="text-xs font-bold text-slate-300 uppercase flex items-center gap-1.5">
-                    <Volume2 className="h-4 w-4 text-pink-400" />
-                    <span>Boost de Volume & Normalisation</span>
+                {/* Volume Boost */}
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 space-y-3">
+                  <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Volume2 className="h-3.5 w-3.5 text-indigo-400" />
+                    <span>Volume & Égalisation</span>
                   </h4>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Amplification du Son</label>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Gain Audio</label>
                       <select
                         value={volumeBoost}
                         onChange={(e) => setVolumeBoost(e.target.value)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-white focus:border-purple-500"
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
                       >
-                        <option value="1.0">Original (100%)</option>
-                        <option value="1.25">Boost +25%</option>
-                        <option value="1.5">Boost +50% (Puissant)</option>
-                        <option value="2.0">Boost +100% (x2 Volume)</option>
+                        <option value="1.0">Normal (100%)</option>
+                        <option value="1.25">+25%</option>
+                        <option value="1.5">+50%</option>
+                        <option value="2.0">+100% (x2)</option>
                       </select>
                     </div>
 
                     <div className="flex flex-col justify-end">
-                      <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-slate-800 bg-slate-900 p-2.5 hover:border-slate-700">
+                      <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-xs text-zinc-300">
                         <input
                           type="checkbox"
                           checked={normalize}
                           onChange={(e) => setNormalize(e.target.checked)}
-                          className="h-4 w-4 rounded accent-purple-500"
+                          className="h-3.5 w-3.5 rounded accent-indigo-600"
                         />
-                        <span className="text-xs font-medium text-slate-200">Normaliser le son</span>
+                        <span>Normaliser</span>
                       </label>
                     </div>
                   </div>
                 </div>
 
-                {/* Audio Trimmer */}
-                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4 md:col-span-2">
-                  <h4 className="text-xs font-bold text-slate-300 uppercase flex items-center gap-1.5">
-                    <Scissors className="h-4 w-4 text-purple-400" />
-                    <span>Découpeur Audio (Start / End Timestamp)</span>
+                {/* Trimmer */}
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 space-y-3 sm:col-span-2">
+                  <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Scissors className="h-3.5 w-3.5 text-indigo-400" />
+                    <span>Découpe Précise (Start / End)</span>
                   </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Début (secondes)</label>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Début (secondes)</label>
                       <input
                         type="number"
                         min="0"
                         max={mediaInfo.duration || 9999}
                         value={startTime}
                         onChange={(e) => setStartTime(e.target.value)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-mono text-white"
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-mono text-zinc-100 focus:border-indigo-500 focus:outline-none"
                       />
-                      <span className="text-[10px] text-slate-500">Temps: {formatTime(Number(startTime))}</span>
+                      <span className="text-[10px] text-zinc-500">Temps: {formatTime(Number(startTime))}</span>
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Fin (secondes)</label>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Fin (secondes)</label>
                       <input
                         type="number"
                         min="0"
                         max={mediaInfo.duration || 9999}
                         value={endTime}
                         onChange={(e) => setEndTime(e.target.value)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-mono text-white"
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-mono text-zinc-100 focus:border-indigo-500 focus:outline-none"
                       />
-                      <span className="text-[10px] text-slate-500">Temps: {formatTime(Number(endTime))}</span>
+                      <span className="text-[10px] text-zinc-500">Temps: {formatTime(Number(endTime))}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* ID3 Tag Editor */}
-                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4 md:col-span-2">
-                  <h4 className="text-xs font-bold text-slate-300 uppercase flex items-center gap-1.5">
-                    <Tag className="h-4 w-4 text-emerald-400" />
-                    <span>Éditeur de Métadonnées (Tags ID3 & Pochette)</span>
+                {/* ID3 Tags */}
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 space-y-3 sm:col-span-2">
+                  <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Tag className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Métadonnées ID3 & Tags</span>
                   </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Titre de la chanson</label>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Titre</label>
                       <input
                         type="text"
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white"
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Artiste</label>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Artiste</label>
                       <input
                         type="text"
                         value={editArtist}
                         onChange={(e) => setEditArtist(e.target.value)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white"
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Album</label>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Album</label>
                       <input
                         type="text"
                         value={editAlbum}
                         onChange={(e) => setEditAlbum(e.target.value)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white"
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
                   </div>

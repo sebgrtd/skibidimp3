@@ -2,7 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "child_process";
 
 const PYTHON_PATH = process.env.PYTHON_PATH || (process.platform === "win32" ? `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe` : "python3");
-const NODE_PATH = process.env.NODE_PATH || (process.platform === "win32" ? `C:\\Program Files\\nodejs\\node.exe` : "node");
+
+export type PlatformType = 
+  | "youtube" 
+  | "spotify" 
+  | "soundcloud" 
+  | "vimeo" 
+  | "instagram" 
+  | "tiktok" 
+  | "pinterest" 
+  | "twitter" 
+  | "generic";
 
 function runYtDlp(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -29,54 +39,12 @@ function runYtDlp(args: string[]): Promise<string> {
   });
 }
 
-async function fetchInfoWithFallback(trimmedUrl: string): Promise<string> {
-  // Attempt 1: Standard with android,web,tv clients
-  try {
-    return await runYtDlp([
-      "--extractor-args", "youtube:player_client=android,web,tv",
-      "--flat-playlist",
-      "--dump-json",
-      "--no-warnings",
-      trimmedUrl
-    ]);
-  } catch (err1: any) {
-    console.warn("Info attempt 1 failed:", err1.message?.split("\n")[0]);
-
-    // Attempt 2: tv_embedded client (bypasses some age restrictions)
-    try {
-      return await runYtDlp([
-        "--extractor-args", "youtube:player_client=tv_embedded,android,web",
-        "--flat-playlist",
-        "--dump-json",
-        "--no-warnings",
-        trimmedUrl
-      ]);
-    } catch (err2: any) {
-      console.warn("Info attempt 2 failed:", err2.message?.split("\n")[0]);
-
-      // Attempt 3: mweb fallback
-      try {
-        return await runYtDlp([
-          "--extractor-args", "youtube:player_client=mweb,tv_embedded",
-          "--flat-playlist",
-          "--dump-json",
-          "--no-warnings",
-          trimmedUrl
-        ]);
-      } catch (err3: any) {
-        console.warn("Info attempt 3 failed:", err3.message?.split("\n")[0]);
-        throw err3;
-      }
-    }
-  }
-}
-
-// Fallback for age-restricted or bot-blocked YouTube videos using public oEmbed API
-async function fetchYouTubeViaOEmbed(trimmedUrl: string): Promise<{ title: string; artist: string; thumbnail: string | null; videoId: string | null }| null> {
+// Fallback for YouTube oEmbed
+async function fetchYouTubeViaOEmbed(trimmedUrl: string): Promise<{ title: string; artist: string; thumbnail: string | null; videoId: string | null } | null> {
   try {
     const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(trimmedUrl)}&format=json`;
     const res = await fetch(oEmbedUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; bot/1.0)" }
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -92,10 +60,111 @@ async function fetchYouTubeViaOEmbed(trimmedUrl: string): Promise<{ title: strin
   }
 }
 
+// Fallback for Vimeo oEmbed
+async function fetchVimeoViaOEmbed(trimmedUrl: string): Promise<{ title: string; artist: string; thumbnail: string | null; duration: number } | null> {
+  try {
+    const oEmbedUrl = `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(trimmedUrl)}`;
+    const res = await fetch(oEmbedUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      title: data.title || "Vidéo Vimeo",
+      artist: data.author_name || "Vimeo",
+      thumbnail: data.thumbnail_url || null,
+      duration: data.duration || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Fallback for Pinterest HTML Scraper (High-Res Images & Videos)
+async function fetchPinterestMedia(trimmedUrl: string): Promise<{ title: string; artist: string; thumbnail: string | null; imageUrl?: string; videoUrl?: string; isVideo: boolean } | null> {
+  try {
+    const res = await fetch(trimmedUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      },
+      redirect: "follow",
+    });
+
+    if (!res.ok) return null;
+    const html = await res.text();
+
+    const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["'](.*?)["']/i) ||
+      html.match(/<title>(.*?)<\/title>/i);
+    const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["'](.*?)["']/i);
+    const videoMatch = html.match(/<meta\s+property=["']og:video(?::secure_url)?["']\s+content=["'](.*?)["']/i);
+
+    let rawImg = imageMatch ? imageMatch[1] : null;
+    if (rawImg) {
+      // Upgrade Pinterest image resolution to full original quality
+      rawImg = rawImg.replace(/\/(?:236x|474x|736x|564x)\//, "/originals/");
+    }
+
+    return {
+      title: titleMatch ? titleMatch[1].replace(/ - Pinterest$/, "").replace(/&amp;/g, "&") : "Pinterest Pin",
+      artist: "Pinterest",
+      thumbnail: rawImg,
+      imageUrl: rawImg || undefined,
+      videoUrl: videoMatch ? videoMatch[1] : undefined,
+      isVideo: !!videoMatch,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Fallback for Twitter / X Media via FXTwitter API
+async function fetchTwitterMedia(trimmedUrl: string): Promise<{ title: string; artist: string; thumbnail: string | null; mediaType: "video" | "image" | "gif" | "text"; mediaUrl?: string; duration?: number } | null> {
+  try {
+    const fxUrl = trimmedUrl.replace(/twitter\.com|x\.com/, "api.fxtwitter.com");
+    const res = await fetch(fxUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; bot/1.0)" }
+    });
+
+    if (!res.ok) return null;
+    const json = await res.json();
+    const tweet = json.tweet;
+
+    if (!tweet) return null;
+
+    let mediaType: "video" | "image" | "gif" | "text" = "text";
+    let mediaUrl: string | undefined = undefined;
+    let thumb: string | null = null;
+    let duration = 0;
+
+    if (tweet.media?.videos?.length > 0) {
+      const vid = tweet.media.videos[0];
+      mediaType = vid.type === "gif" ? "gif" : "video";
+      mediaUrl = vid.url;
+      thumb = vid.thumbnail_url || null;
+      duration = vid.duration ? Math.round(vid.duration / 1000) : 0;
+    } else if (tweet.media?.photos?.length > 0) {
+      mediaType = "image";
+      mediaUrl = tweet.media.photos[0].url;
+      thumb = tweet.media.photos[0].url;
+    }
+
+    return {
+      title: tweet.text ? (tweet.text.length > 80 ? tweet.text.substring(0, 80) + "..." : tweet.text) : "Post X / Twitter",
+      artist: tweet.author ? `@${tweet.author.screen_name} (${tweet.author.name})` : "X (Twitter)",
+      thumbnail: thumb || (tweet.author ? tweet.author.avatar_url : null),
+      mediaType,
+      mediaUrl,
+      duration,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: NextRequest) {
   let trimmedUrl = "";
-  let platform: "youtube" | "spotify" | "soundcloud" | "generic" = "generic";
+  let platform: PlatformType = "generic";
 
   try {
     const { url } = await req.json();
@@ -106,15 +175,80 @@ export async function POST(req: NextRequest) {
 
     trimmedUrl = url.trim();
 
+    // 1. Identify Platform
     if (trimmedUrl.includes("youtube.com") || trimmedUrl.includes("youtu.be")) {
       platform = "youtube";
-    } else if (trimmedUrl.includes("spotify.com")) {
+    } else if (trimmedUrl.includes("spotify.com") || trimmedUrl.includes("open.spotify.com")) {
       platform = "spotify";
     } else if (trimmedUrl.includes("soundcloud.com")) {
       platform = "soundcloud";
+    } else if (trimmedUrl.includes("vimeo.com")) {
+      platform = "vimeo";
+    } else if (trimmedUrl.includes("tiktok.com")) {
+      platform = "tiktok";
+    } else if (trimmedUrl.includes("instagram.com")) {
+      platform = "instagram";
+    } else if (trimmedUrl.includes("twitter.com") || trimmedUrl.includes("x.com")) {
+      platform = "twitter";
+    } else if (trimmedUrl.includes("pinterest.com") || trimmedUrl.includes("pin.it")) {
+      platform = "pinterest";
     }
 
-    // Handle Spotify links via embed html scraper & yt-dlp search fallback
+    // 2. Specialized Platform Handlers
+
+    // --- PINTEREST ---
+    if (platform === "pinterest") {
+      const pinData = await fetchPinterestMedia(trimmedUrl);
+      if (pinData) {
+        return NextResponse.json({
+          platform: "pinterest",
+          isPlaylist: false,
+          title: pinData.title,
+          artist: pinData.artist,
+          thumbnail: pinData.thumbnail,
+          duration: 0,
+          url: pinData.videoUrl || pinData.imageUrl || trimmedUrl,
+          originalUrl: trimmedUrl,
+          mediaType: pinData.isVideo ? "video" : "image",
+          hasVideo: pinData.isVideo,
+          hasAudio: pinData.isVideo,
+          hasImage: !pinData.isVideo,
+          availableFormats: pinData.isVideo ? ["mp4", "mp3", "png"] : ["png", "jpg"],
+        });
+      }
+    }
+
+    // --- TWITTER / X ---
+    if (platform === "twitter") {
+      const twData = await fetchTwitterMedia(trimmedUrl);
+      if (twData && twData.mediaType !== "text") {
+        const isVid = twData.mediaType === "video";
+        const isGif = twData.mediaType === "gif";
+        const isImg = twData.mediaType === "image";
+
+        return NextResponse.json({
+          platform: "twitter",
+          isPlaylist: false,
+          title: twData.title,
+          artist: twData.artist,
+          thumbnail: twData.thumbnail,
+          duration: twData.duration || 0,
+          url: twData.mediaUrl || trimmedUrl,
+          originalUrl: trimmedUrl,
+          mediaType: twData.mediaType,
+          hasVideo: isVid || isGif,
+          hasAudio: isVid,
+          hasImage: isImg || isGif,
+          availableFormats: isVid 
+            ? ["mp4", "mp3", "gif", "png"] 
+            : isGif 
+              ? ["gif", "mp4", "png"] 
+              : ["png", "jpg"],
+        });
+      }
+    }
+
+    // --- SPOTIFY ---
     if (platform === "spotify") {
       try {
         const match = trimmedUrl.match(/spotify\.com\/(track|playlist|album)\/([a-zA-Z0-9]+)/);
@@ -167,143 +301,161 @@ export async function POST(req: NextRequest) {
                     entries,
                     url: trimmedUrl,
                     originalUrl: trimmedUrl,
+                    mediaType: "audio",
+                    hasVideo: false,
+                    hasAudio: true,
+                    hasImage: false,
+                    availableFormats: ["mp3", "flac", "wav", "m4a"],
                   });
                 }
 
                 // Single track
                 const trackTitle = entity.title || entity.name;
                 const artistName = entity.artists?.[0]?.name || entity.subtitle || "";
-                const searchQuery = `${artistName} - ${trackTitle} audio`;
-
-                let stdout = "";
-                try {
-                  stdout = await runYtDlp([
-                    "--extractor-args", "youtube:player_client=android,web,tv",
-                    "--flat-playlist",
-                    "--dump-json",
-                    `ytsearch1:${searchQuery}`
-                  ]);
-                } catch {
-                  try {
-                    stdout = await runYtDlp([
-                      "--extractor-args", "youtube:player_client=tv_embedded,android,web",
-                      "--flat-playlist",
-                      "--dump-json",
-                      `ytsearch1:${searchQuery}`
-                    ]);
-                  } catch {
-                    stdout = await runYtDlp([
-                      "--extractor-args", "youtube:player_client=mweb,tv_embedded",
-                      "--flat-playlist",
-                      "--dump-json",
-                      `ytsearch1:${searchQuery}`
-                    ]);
-                  }
-                }
-
-                const ytInfo = JSON.parse(stdout.split("\n")[0]);
 
                 return NextResponse.json({
                   platform: "spotify",
                   isPlaylist: false,
-                  id: entity.id,
                   title: trackTitle,
-                  artist: artistName,
-                  duration: Math.floor((entity.duration || 200000) / 1000),
-                  thumbnail: entity.coverArt?.sources?.[0]?.url || ytInfo.thumbnail || null,
-                  url: ytInfo.url || (ytInfo.id ? `https://www.youtube.com/watch?v=${ytInfo.id}` : trimmedUrl),
+                  artist: artistName || "Artiste Inconnu",
+                  duration: Math.floor((entity.duration || 180000) / 1000),
+                  thumbnail: entity.coverArt?.sources?.[0]?.url || null,
+                  url: trimmedUrl,
                   originalUrl: trimmedUrl,
-                  views: ytInfo.view_count || 0,
+                  mediaType: "audio",
+                  hasVideo: false,
+                  hasAudio: true,
+                  hasImage: false,
+                  availableFormats: ["mp3", "flac", "wav", "m4a", "ogg"],
                 });
               }
             }
           }
         }
-      } catch (err) {
-        console.error("Erreur parsing Spotify embed:", err);
+      } catch (spotErr) {
+        console.warn("Spotify embed parsing error:", spotErr);
       }
     }
 
-    // Handle YouTube / SoundCloud / Generic via yt-dlp with fallback
-    const stdout = await fetchInfoWithFallback(trimmedUrl);
-
-    const lines = stdout.trim().split("\n").filter(Boolean);
-
-    if (lines.length > 1) {
-      const entries = lines.map((line, idx) => {
-        try {
-          const item = JSON.parse(line);
-          return {
-            index: idx + 1,
-            id: item.id || item.url,
-            title: item.title || `Piste ${idx + 1}`,
-            artist: item.uploader || item.artist || "Inconnu",
-            duration: item.duration || 0,
-            url: item.url ? (item.url.startsWith("http") ? item.url : `https://www.youtube.com/watch?v=${item.id}`) : trimmedUrl,
-            thumbnail: item.thumbnails?.[0]?.url || item.thumbnail || null,
-          };
-        } catch {
-          return null;
-        }
-      }).filter(Boolean);
-
-      const firstItem = JSON.parse(lines[0]);
-
-      return NextResponse.json({
-        platform,
-        isPlaylist: true,
-        title: firstItem.playlist_title || firstItem.title || "Playlist",
-        artist: firstItem.uploader || firstItem.channel || "Artistes Divers",
-        thumbnail: entries[0]?.thumbnail || firstItem.thumbnail || null,
-        totalTracks: entries.length,
-        entries,
-        url: trimmedUrl,
-      });
-    }
-
-    const info = JSON.parse(lines[0]);
-
-    return NextResponse.json({
-      platform,
-      isPlaylist: false,
-      id: info.id,
-      title: info.title || "Audio Sans Titre",
-      artist: info.uploader || info.artist || info.channel || "Artiste",
-      duration: info.duration || 0,
-      thumbnail: info.thumbnail || info.thumbnails?.[info.thumbnails?.length - 1]?.url || null,
-      url: info.webpage_url || trimmedUrl,
-      views: info.view_count || 0,
-      uploadDate: info.upload_date || null,
-    });
-
-  } catch (error: any) {
-    console.error("Erreur /api/info:", error);
-
-    // For YouTube URLs: try oEmbed as last resort (works for age-restricted videos)
-    if (trimmedUrl && (platform === "youtube")) {
-      console.log("Trying YouTube oEmbed fallback for:", trimmedUrl);
-      const oEmbed = await fetchYouTubeViaOEmbed(trimmedUrl);
-      if (oEmbed) {
-        console.log("oEmbed fallback success:", oEmbed.title);
+    // --- VIMEO ---
+    if (platform === "vimeo") {
+      const vimeoData = await fetchVimeoViaOEmbed(trimmedUrl);
+      if (vimeoData) {
         return NextResponse.json({
-          platform: "youtube",
+          platform: "vimeo",
           isPlaylist: false,
-          id: oEmbed.videoId,
-          title: oEmbed.title,
-          artist: oEmbed.artist,
-          duration: 0,
-          thumbnail: oEmbed.thumbnail,
+          title: vimeoData.title,
+          artist: vimeoData.artist,
+          duration: vimeoData.duration,
+          thumbnail: vimeoData.thumbnail,
           url: trimmedUrl,
           originalUrl: trimmedUrl,
-          views: 0,
-          uploadDate: null,
-          ageRestricted: true,
+          mediaType: "video",
+          hasVideo: true,
+          hasAudio: true,
+          hasImage: false,
+          availableFormats: ["mp4", "mp3", "wav", "m4a"],
         });
       }
     }
 
+    // --- YOUTUBE, TIKTOK, INSTAGRAM & GENERAL (via yt-dlp) ---
+    let stdout = "";
+    try {
+      stdout = await runYtDlp([
+        "--dump-json",
+        "--no-warnings",
+        "--flat-playlist",
+        trimmedUrl
+      ]);
+    } catch (ytdlpErr: any) {
+      // Fallback for YouTube via oEmbed if yt-dlp is blocked
+      if (platform === "youtube") {
+        const oEmbedData = await fetchYouTubeViaOEmbed(trimmedUrl);
+        if (oEmbedData) {
+          return NextResponse.json({
+            platform: "youtube",
+            isPlaylist: false,
+            title: oEmbedData.title,
+            artist: oEmbedData.artist,
+            thumbnail: oEmbedData.thumbnail,
+            duration: 0,
+            url: trimmedUrl,
+            originalUrl: trimmedUrl,
+            mediaType: "video",
+            hasVideo: true,
+            hasAudio: true,
+            hasImage: false,
+            availableFormats: ["mp4", "mp3", "flac", "wav", "m4a", "ogg"],
+          });
+        }
+      }
+      throw ytdlpErr;
+    }
+
+    const info = JSON.parse(stdout);
+
+    // Playlist detection
+    if (info._type === "playlist" || (info.entries && Array.isArray(info.entries))) {
+      const entries = (info.entries || []).map((entry: any, index: number) => ({
+        index: index + 1,
+        id: entry.id,
+        title: entry.title || `Piste ${index + 1}`,
+        artist: entry.uploader || entry.artist || info.title || "Artiste Inconnu",
+        duration: entry.duration || 0,
+        url: entry.webpage_url || entry.url || `https://www.youtube.com/watch?v=${entry.id}`,
+        thumbnail: entry.thumbnail || null,
+      }));
+
+      return NextResponse.json({
+        platform,
+        isPlaylist: true,
+        title: info.title || "Playlist",
+        artist: info.uploader || "Auteur Inconnu",
+        thumbnail: info.thumbnails?.[0]?.url || null,
+        totalTracks: entries.length,
+        entries,
+        url: trimmedUrl,
+        originalUrl: trimmedUrl,
+        mediaType: "mixed",
+        hasVideo: true,
+        hasAudio: true,
+        hasImage: false,
+        availableFormats: ["mp4", "mp3", "flac", "wav", "m4a"],
+      });
+    }
+
+    // Single item
+    const hasVideo = info.vcodec && info.vcodec !== "none";
+    const hasAudio = (info.acodec && info.acodec !== "none") || (info.formats && info.formats.some((f: any) => f.acodec !== "none"));
+    const availableFormats: string[] = [];
+
+    if (hasVideo) availableFormats.push("mp4");
+    if (hasAudio) availableFormats.push("mp3", "flac", "wav", "m4a");
+    if (hasVideo && (platform === "twitter" || platform === "tiktok" || (info.duration && info.duration <= 60))) {
+      availableFormats.push("gif");
+    }
+
+    return NextResponse.json({
+      platform,
+      isPlaylist: false,
+      title: info.title || "Titre Inconnu",
+      artist: info.uploader || info.artist || info.channel || "Auteur Inconnu",
+      duration: info.duration || 0,
+      thumbnail: info.thumbnail || null,
+      url: info.webpage_url || trimmedUrl,
+      originalUrl: trimmedUrl,
+      mediaType: hasVideo ? "video" : "audio",
+      hasVideo,
+      hasAudio,
+      hasImage: false,
+      availableFormats: availableFormats.length > 0 ? availableFormats : ["mp4", "mp3"],
+    });
+
+  } catch (err: any) {
+    console.error("Info error:", err);
     return NextResponse.json(
-      { error: "Impossible de récupérer les informations pour ce lien. Assurez-vous que l'URL est publique et valide." },
+      { error: err.message || "Impossible de récupérer les informations de ce lien." },
       { status: 500 }
     );
   }
