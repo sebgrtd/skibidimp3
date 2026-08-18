@@ -6,13 +6,15 @@ import LockScreen from "@/components/LockScreen";
 import ConverterForm from "@/components/ConverterForm";
 import PlaylistConverter from "@/components/PlaylistConverter";
 import UserDashboard, { SyncedHistoryItem } from "@/components/UserDashboard";
+import AdminPanel from "@/components/AdminPanel";
 import FeaturesGrid from "@/components/FeaturesGrid";
-import { Sparkles, Youtube, Music, Radio, Loader2 } from "lucide-react";
+import { Sparkles, Youtube, Music, Radio, Loader2, ShieldCheck } from "lucide-react";
 
 interface UserProfile {
   id: string;
   username: string;
   email: string;
+  isAdmin?: boolean;
 }
 
 export default function Home() {
@@ -96,7 +98,7 @@ export default function Home() {
         <section className="text-center space-y-4 max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 rounded-full border border-pink-500/30 bg-pink-500/10 px-4 py-1.5 text-xs font-bold text-pink-400">
             <Sparkles className="h-4 w-4 animate-spin" />
-            <span>SUPER SKIBIDI EDITION • COMPTES & SYNCHRO 🚽⚡</span>
+            <span>SUPER SKIBIDI EDITION • ACCÈS PRIVÉ & CODES D'INVITATION 🚽⚡</span>
           </div>
 
           <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white leading-tight">
@@ -123,6 +125,13 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        {/* Admin Panel for Admin User */}
+        {user && user.isAdmin && (
+          <section>
+            <AdminPanel />
+          </section>
+        )}
 
         {/* Converter Form / Playlist Converter */}
         <section>
@@ -156,7 +165,7 @@ export default function Home() {
       <footer className="border-t border-slate-800 bg-slate-950/80 py-6 text-center text-xs text-slate-500">
         <div className="container mx-auto px-4 space-y-2">
           <p className="font-bold text-slate-400">
-            SUPER SKIBIDI MP3 🚽⚡ • Moteur d'Extraction Audio & Synchro Compte (320kbps Studio)
+            SUPER SKIBIDI MP3 🚽⚡ • Accès Privé Restreint (320kbps Studio)
           </p>
         </div>
       </footer>

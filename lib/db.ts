@@ -8,6 +8,7 @@ export interface User {
   email: string;
   passwordHash: string;
   salt: string;
+  isAdmin?: boolean;
   createdAt: string;
 }
 
@@ -30,10 +31,20 @@ export interface DownloadHistoryRecord {
   timestamp: number;
 }
 
+export interface InviteCode {
+  id: string;
+  code: string;
+  createdById: string;
+  isUsed: boolean;
+  usedByUsername?: string;
+  createdAt: string;
+}
+
 const DATA_DIR = path.join(process.cwd(), ".data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
 const HISTORY_FILE = path.join(DATA_DIR, "history.json");
+const INVITES_FILE = path.join(DATA_DIR, "invites.json");
 
 function ensureDataFiles() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -48,6 +59,12 @@ function ensureDataFiles() {
   if (!fs.existsSync(HISTORY_FILE)) {
     fs.writeFileSync(HISTORY_FILE, JSON.stringify([]));
   }
+  if (!fs.existsSync(INVITES_FILE)) {
+    fs.writeFileSync(INVITES_FILE, JSON.stringify([]));
+  }
+
+  // Seed default admin account if not exists
+  seedAdminUser();
 }
 
 function readJson<T>(filePath: string): T {
@@ -61,7 +78,9 @@ function readJson<T>(filePath: string): T {
 }
 
 function writeJson<T>(filePath: string, data: T): void {
-  ensureDataFiles();
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
@@ -75,6 +94,31 @@ export function hashPassword(password: string): { hash: string; salt: string } {
 export function verifyPassword(password: string, hash: string, salt: string): boolean {
   const verifyHash = crypto.scryptSync(password, salt, 64).toString("hex");
   return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(verifyHash, "hex"));
+}
+
+function seedAdminUser() {
+  try {
+    const users = JSON.parse(fs.readFileSync(USERS_FILE, "utf-8")) as User[];
+    const adminExists = users.some((u) => u.username.toLowerCase() === "admin" || u.isAdmin);
+
+    if (!adminExists) {
+      const salt = crypto.randomBytes(16).toString("hex");
+      const hash = crypto.scryptSync("SkibidiAdmin2026!", salt, 64).toString("hex");
+
+      const adminUser: User = {
+        id: "usr_admin_001",
+        username: "admin",
+        email: "admin@skibidi-mp3.sebastien-gratade.fr",
+        passwordHash: hash,
+        salt,
+        isAdmin: true,
+        createdAt: new Date().toISOString(),
+      };
+
+      users.unshift(adminUser);
+      fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
+    }
+  } catch {}
 }
 
 // Users API
@@ -97,6 +141,7 @@ export function createUser(username: string, email: string, password: string): U
     email: normalizedEmail,
     passwordHash: hash,
     salt,
+    isAdmin: false,
     createdAt: new Date().toISOString(),
   };
 
@@ -162,7 +207,6 @@ export function addDownloadHistory(userId: string, record: Omit<DownloadHistoryR
     timestamp: Date.now(),
   };
 
-  // Avoid duplicates for same URL for same user
   const filtered = history.filter(h => !(h.userId === userId && h.url === record.url));
   filtered.unshift(newRecord);
   
@@ -175,4 +219,48 @@ export function getUserDownloadHistory(userId: string): DownloadHistoryRecord[] 
   return history
     .filter((h) => h.userId === userId)
     .sort((a, b) => b.timestamp - a.timestamp);
+}
+
+// Invite Codes API
+export function generateInviteCode(adminUserId: string): InviteCode {
+  const invites = readJson<InviteCode[]>(INVITES_FILE);
+  const randomSuffix = crypto.randomBytes(3).toString("hex").toUpperCase();
+  const codeStr = `SKIBIDI-${randomSuffix}`;
+
+  const newInvite: InviteCode = {
+    id: "inv_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
+    code: codeStr,
+    createdById: adminUserId,
+    isUsed: false,
+    createdAt: new Date().toISOString(),
+  };
+
+  invites.unshift(newInvite);
+  writeJson(INVITES_FILE, invites);
+  return newInvite;
+}
+
+export function validateAndUseInviteCode(code: string, username: string): boolean {
+  const invites = readJson<InviteCode[]>(INVITES_FILE);
+  const cleanCode = code.trim().toUpperCase();
+
+  const inviteIndex = invites.findIndex((inv) => inv.code.toUpperCase() === cleanCode && !inv.isUsed);
+  if (inviteIndex === -1) {
+    return false;
+  }
+
+  invites[inviteIndex].isUsed = true;
+  invites[inviteIndex].usedByUsername = username;
+  writeJson(INVITES_FILE, invites);
+  return true;
+}
+
+export function getInviteCodes(): InviteCode[] {
+  return readJson<InviteCode[]>(INVITES_FILE);
+}
+
+export function deleteInviteCode(codeId: string): void {
+  const invites = readJson<InviteCode[]>(INVITES_FILE);
+  const updated = invites.filter((i) => i.id !== codeId);
+  writeJson(INVITES_FILE, updated);
 }

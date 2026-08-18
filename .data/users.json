@@ -1,10 +1,28 @@
 [
   {
+    "id": "usr_admin_001",
+    "username": "admin",
+    "email": "admin@skibidi-mp3.sebastien-gratade.fr",
+    "passwordHash": "a0e5a69098b1631d7dbd6ddf0d423601330fdc710b49a75f679237eb4e1862fb141978eb689f7fd80473b3316dce20b8d1259aa31e051080bf582deb5312f0a7",
+    "salt": "edf73a706a91e49d6bc85208cf370c50",
+    "isAdmin": true,
+    "createdAt": "2026-08-18T12:51:11.275Z"
+  },
+  {
     "id": "usr_1787055827158_rowun",
     "username": "skibidi_826916",
     "email": "skibidi_826916@skibidi.fr",
     "passwordHash": "78dd9f20cb47f68a3dae5de3e10d404394c43499e817860e30744b0b3a654ba55c25a248290f255812a81c39e35c95080e5b9821283e7a96b4d285e57d64c789",
     "salt": "5a3020057ddcbd0044fcf94176ecca67",
     "createdAt": "2026-08-18T12:23:47.158Z"
+  },
+  {
+    "id": "usr_1787057472862_i58l6",
+    "username": "invited_472562",
+    "email": "invited_472562@skibidi.fr",
+    "passwordHash": "f782ff5f6ef0f1855f6440cbe59f44b762c648c6cbbf3a0ff179ddbcc5caf9b87e4bd9e0f65903d885f30be4424587f79f25f53d9edb1abc23b01dd8c624441f",
+    "salt": "16a26a29b74695e313df47660f3f3cba",
+    "isAdmin": false,
+    "createdAt": "2026-08-18T12:51:12.862Z"
   }
 ]

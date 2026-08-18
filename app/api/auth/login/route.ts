@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     const token = createSession(user.id);
 
     const response = NextResponse.json({
-      user: { id: user.id, username: user.username, email: user.email },
+      user: { id: user.id, username: user.username, email: user.email, isAdmin: !!user.isAdmin },
       token,
     });
 

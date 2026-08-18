@@ -1,23 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createUser, createSession } from "@/lib/db";
+import { createUser, createSession, validateAndUseInviteCode } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
-    const { username, email, password } = await req.json();
+    const { username, email, password, inviteCode } = await req.json();
 
-    if (!username || !email || !password) {
-      return NextResponse.json({ error: "Tous les champs sont requis." }, { status: 400 });
+    if (!username || !email || !password || !inviteCode) {
+      return NextResponse.json({ error: "Tous les champs y compris le code d'invitation sont requis." }, { status: 400 });
     }
 
     if (password.length < 4) {
       return NextResponse.json({ error: "Le mot de passe doit contenir au moins 4 caractères." }, { status: 400 });
     }
 
+    // Validate invite code
+    const validInvite = validateAndUseInviteCode(inviteCode, username.trim());
+    if (!validInvite) {
+      return NextResponse.json(
+        { error: "Code d'invitation invalide ou déjà utilisé. Demandez un code valide à l'administrateur." },
+        { status: 400 }
+      );
+    }
+
     const user = createUser(username, email, password);
     const token = createSession(user.id);
 
     const response = NextResponse.json({
-      user: { id: user.id, username: user.username, email: user.email },
+      user: { id: user.id, username: user.username, email: user.email, isAdmin: !!user.isAdmin },
       token,
     });
 
