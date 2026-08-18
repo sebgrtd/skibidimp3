@@ -15,7 +15,7 @@ async function extractAudioStream(downloadUrl: string, rawTemplate: string): Pro
 
   const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
-  const attemptDownload = (extraFlags: string[]) => {
+  const attemptDownload = (target: string, extraFlags: string[]) => {
     return new Promise<string>((resolve, reject) => {
       const args = [
         ...ytDlpBaseArgs,
@@ -26,7 +26,7 @@ async function extractAudioStream(downloadUrl: string, rawTemplate: string): Pro
         "-o", rawTemplate,
         "--no-playlist",
         ...extraFlags,
-        downloadUrl,
+        target,
       ];
 
       const proc = spawn(ytDlpCommand, args);
@@ -50,20 +50,18 @@ async function extractAudioStream(downloadUrl: string, rawTemplate: string): Pro
     });
   };
 
-  // Attempt 1: Standard extraction with user agent and remote components
+  // Attempt 1: Standard extraction with android,web,tv player clients
   try {
-    return await attemptDownload([]);
+    return await attemptDownload(downloadUrl, ["--extractor-args", "youtube:player_client=android,web,tv"]);
   } catch (err: any) {
     console.warn("Attempt 1 yt-dlp failed:", err.message);
 
-    // Attempt 2: Fallback with player_client=mweb,tv,web
+    // Attempt 2: Fallback with mweb,tv,web player clients
     try {
-      return await attemptDownload(["--extractor-args", "youtube:player_client=mweb,tv,web"]);
+      return await attemptDownload(downloadUrl, ["--extractor-args", "youtube:player_client=mweb,tv,web"]);
     } catch (err2: any) {
       console.warn("Attempt 2 yt-dlp failed:", err2.message);
-
-      // Attempt 3: Fallback with player_client=ios,web_creator
-      return await attemptDownload(["--extractor-args", "youtube:player_client=ios,web_creator"]);
+      throw err2;
     }
   }
 }
@@ -116,14 +114,28 @@ export async function POST(req: NextRequest) {
       downloadedRaw = await extractAudioStream(downloadTargetUrl, rawTemplate);
       tmpFiles.push(downloadedRaw);
     } catch (extractErr: any) {
-      // If direct URL extraction failed on YouTube, try fallback search query
-      if (metadata.title && !downloadTargetUrl.startsWith("ytsearch1:")) {
-        const fallbackSearch = `ytsearch1:${metadata.artist || ""} ${metadata.title} audio`.trim();
+      // Fallback 1: If direct URL extraction failed on YouTube, try YouTube search
+      const searchTitle = metadata.title || "music";
+      const searchArtist = metadata.artist || "";
+      const searchTerms = `${searchArtist} ${searchTitle}`.trim();
+
+      if (!downloadTargetUrl.startsWith("ytsearch1:")) {
+        const fallbackSearch = `ytsearch1:${searchTerms} audio`.trim();
         console.log("Tentative de secours via recherche YouTube:", fallbackSearch);
-        downloadedRaw = await extractAudioStream(fallbackSearch, rawTemplate);
-        tmpFiles.push(downloadedRaw);
+        try {
+          downloadedRaw = await extractAudioStream(fallbackSearch, rawTemplate);
+          tmpFiles.push(downloadedRaw);
+        } catch (searchErr: any) {
+          // Fallback 2: Try SoundCloud search fallback
+          console.log("Tentative de secours via SoundCloud search:", searchTerms);
+          downloadedRaw = await extractAudioStream(`scsearch1:${searchTerms}`, rawTemplate);
+          tmpFiles.push(downloadedRaw);
+        }
       } else {
-        throw extractErr;
+        // Was already a ytsearch1 query, try SoundCloud search as ultimate fallback
+        console.log("Tentative de secours ultime via SoundCloud search:", searchTerms);
+        downloadedRaw = await extractAudioStream(`scsearch1:${searchTerms}`, rawTemplate);
+        tmpFiles.push(downloadedRaw);
       }
     }
 
