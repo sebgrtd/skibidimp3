@@ -15,7 +15,6 @@ export interface InviteCodeItem {
 export interface UserItem {
   id: string;
   username: string;
-  email: string;
   isAdmin?: boolean;
   createdAt: string;
 }
@@ -31,7 +30,6 @@ export default function AdminPanel() {
 
   // Direct User Creation State
   const [newUsername, setNewUsername] = useState("");
-  const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [creatingUser, setCreatingUser] = useState(false);
   const [userMsg, setUserMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -113,7 +111,6 @@ export default function AdminPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: newUsername,
-          email: newEmail,
           password: newPassword,
         }),
       });
@@ -126,7 +123,6 @@ export default function AdminPanel() {
 
       setUserMsg({ type: "success", text: `Le compte pour @${newUsername} a été créé avec succès !` });
       setNewUsername("");
-      setNewEmail("");
       setNewPassword("");
       fetchUsers();
     } catch (err: any) {
@@ -137,55 +133,55 @@ export default function AdminPanel() {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto rounded-2xl border border-amber-500/40 bg-slate-900/90 p-6 shadow-2xl space-y-6 backdrop-blur-xl">
+    <div className="w-full max-w-4xl mx-auto rounded-2xl border border-amber-500/30 bg-slate-900/90 p-4 sm:p-6 shadow-2xl space-y-6 backdrop-blur-xl">
       {/* Admin Header */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-white font-bold shadow-lg shadow-amber-500/30">
+          <div className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-white font-bold shadow-lg shadow-amber-500/20">
             <ShieldCheck className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <span>Panneau d'Administration</span>
-              <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] text-amber-400 font-extrabold uppercase">
-                ADMIN ACCESS
-              </span>
+            <h2 className="text-base sm:text-lg font-black text-white">
+              Panneau d'Administration
             </h2>
             <p className="text-xs text-slate-400">Gestion des utilisateurs & Codes d'invitation</p>
           </div>
         </div>
 
-        {/* Tab Buttons */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-950/80 border border-slate-800">
+        {/* Tab Buttons - Responsive Grid/Flex */}
+        <div className="w-full lg:w-auto grid grid-cols-3 sm:flex items-center gap-1.5 p-1 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
           <button
             type="button"
             onClick={() => setActiveTab("invites")}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+            className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
               activeTab === "invites" ? "bg-amber-500 text-slate-950 font-extrabold shadow-md" : "text-slate-400 hover:text-white"
             }`}
           >
             <KeyRound className="h-3.5 w-3.5" />
-            <span>Codes d'Invitation</span>
+            <span className="hidden sm:inline">Codes d'Invitation</span>
+            <span className="sm:hidden">Codes</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("create-user")}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+            className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
               activeTab === "create-user" ? "bg-amber-500 text-slate-950 font-extrabold shadow-md" : "text-slate-400 hover:text-white"
             }`}
           >
             <UserPlus className="h-3.5 w-3.5" />
-            <span>Créer un Compte Direct</span>
+            <span className="hidden sm:inline">Créer un Compte</span>
+            <span className="sm:hidden">Créer</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("users")}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+            className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
               activeTab === "users" ? "bg-amber-500 text-slate-950 font-extrabold shadow-md" : "text-slate-400 hover:text-white"
             }`}
           >
             <Users className="h-3.5 w-3.5" />
-            <span>Liste Utilisateurs</span>
+            <span className="hidden sm:inline">Membres</span>
+            <span className="sm:hidden">Membres</span>
           </button>
         </div>
       </div>
@@ -193,7 +189,7 @@ export default function AdminPanel() {
       {/* Tab 1: Codes d'invitation */}
       {activeTab === "invites" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">
               Codes d'Invitation Générés ({invites.length})
             </div>
@@ -201,14 +197,14 @@ export default function AdminPanel() {
               type="button"
               onClick={handleGenerateCode}
               disabled={generating}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-2 text-xs font-extrabold text-white shadow-lg hover:brightness-110 disabled:opacity-50 transition-all"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-lg hover:brightness-110 disabled:opacity-50 transition-all"
             >
               {generating ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Plus className="h-4 w-4" />
               )}
-              <span>Générer un Nouveau Code</span>
+              <span>Générer un Code</span>
             </button>
           </div>
 
@@ -221,12 +217,12 @@ export default function AdminPanel() {
             <div className="p-8 text-center text-slate-500 text-xs space-y-2 border border-dashed border-slate-800 rounded-xl">
               <KeyRound className="h-8 w-8 mx-auto text-slate-600" />
               <p>Aucun code d'invitation généré pour le moment.</p>
-              <p className="text-[11px] text-slate-400">Cliquez sur "Générer un Nouveau Code" pour permettre à quelqu'un de s'inscrire.</p>
+              <p className="text-[11px] text-slate-400">Cliquez sur "Générer un Code" pour permettre à quelqu'un de s'inscrire.</p>
             </div>
           ) : (
             <div className="divide-y divide-slate-800/80 border border-slate-800 rounded-xl overflow-hidden bg-slate-950/60 max-h-72 overflow-y-auto">
               {invites.map((inv) => (
-                <div key={inv.id} className="flex items-center justify-between px-4 py-3 text-xs hover:bg-slate-800/40 transition-colors">
+                <div key={inv.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 gap-3 text-xs hover:bg-slate-800/40 transition-colors">
                   <div className="flex items-center gap-3">
                     <span className="font-mono font-black text-amber-400 bg-amber-950/60 border border-amber-500/30 px-3 py-1 rounded-lg text-sm tracking-wider">
                       {inv.code}
@@ -250,7 +246,7 @@ export default function AdminPanel() {
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center justify-between w-full sm:w-auto gap-4">
                     {inv.isUsed ? (
                       <div className="flex items-center gap-1.5 text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-full text-[11px]">
                         <UserCheck className="h-3.5 w-3.5" />
@@ -259,7 +255,7 @@ export default function AdminPanel() {
                     ) : (
                       <div className="flex items-center gap-1.5 text-amber-300 font-bold bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-full text-[11px]">
                         <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                        <span>Disponible (Usage unique)</span>
+                        <span>Disponible</span>
                       </div>
                     )}
 
@@ -285,14 +281,14 @@ export default function AdminPanel() {
           <div className="space-y-1">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <UserPlus className="h-4 w-4 text-amber-400" />
-              <span>Créer un Compte Utilisateur en 1-Clic</span>
+              <span>Créer un Compte Utilisateur</span>
             </h3>
             <p className="text-xs text-slate-400">
-              En tant qu'administrateur, vous pouvez créer un compte directement sans passer par un code d'invitation.
+              Créez directement un identifiant et un mot de passe sans passer par un code d'invitation.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">Nom d'utilisateur</label>
               <input
@@ -301,19 +297,7 @@ export default function AdminPanel() {
                 value={newUsername}
                 onChange={(e) => setNewUsername(e.target.value)}
                 placeholder="Ex: Sebastien"
-                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Adresse Email</label>
-              <input
-                type="email"
-                required
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="Ex: user@exemple.fr"
-                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
               />
             </div>
 
@@ -324,8 +308,8 @@ export default function AdminPanel() {
                 required
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Ex: Pass1234!"
-                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                placeholder="Ex: MonMotDePasseFort123"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
               />
             </div>
           </div>
@@ -341,14 +325,14 @@ export default function AdminPanel() {
           <button
             type="submit"
             disabled={creatingUser}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-2.5 text-xs font-extrabold text-white shadow-lg hover:brightness-110 disabled:opacity-50 transition-all"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-2.5 text-xs font-extrabold text-white shadow-lg hover:brightness-110 disabled:opacity-50 transition-all"
           >
             {creatingUser ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <UserPlus className="h-4 w-4" />
             )}
-            <span>Créer le Compte Directement</span>
+            <span>Créer le Compte</span>
           </button>
         </form>
       )}
@@ -370,24 +354,21 @@ export default function AdminPanel() {
               {usersList.map((usr) => (
                 <div key={usr.id} className="flex items-center justify-between px-4 py-3 text-xs">
                   <div className="flex items-center gap-3">
-                    <div className="h-7 w-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-white font-bold text-xs">
+                    <div className="h-8 w-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-white font-bold text-xs">
                       {usr.username.charAt(0).toUpperCase()}
                     </div>
-                    <div>
-                      <span className="font-bold text-white flex items-center gap-2">
-                        <span>@{usr.username}</span>
-                        {usr.isAdmin && (
-                          <span className="rounded-md bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[9px] text-amber-400 font-bold">
-                            ADMIN
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-[11px] text-slate-400">{usr.email}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white">@{usr.username}</span>
+                      {usr.isAdmin && (
+                        <span className="rounded-md bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[9px] text-amber-400 font-bold">
+                          ADMIN
+                        </span>
+                      )}
                     </div>
                   </div>
 
                   <span className="text-[10px] text-slate-500 font-mono">
-                    Créé le {new Date(usr.createdAt).toLocaleDateString("fr-FR")}
+                    Inscrit le {new Date(usr.createdAt).toLocaleDateString("fr-FR")}
                   </span>
                 </div>
               ))}

@@ -3,10 +3,10 @@ import { createUser, createSession, validateAndUseInviteCode } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
-    const { username, email, password, inviteCode } = await req.json();
+    const { username, password, inviteCode } = await req.json();
 
-    if (!username || !email || !password || !inviteCode) {
-      return NextResponse.json({ error: "Tous les champs y compris le code d'invitation sont requis." }, { status: 400 });
+    if (!username || !password || !inviteCode) {
+      return NextResponse.json({ error: "Le nom d'utilisateur, le mot de passe et le code d'invitation sont requis." }, { status: 400 });
     }
 
     if (password.length < 4) {
@@ -22,11 +22,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = createUser(username, email, password);
+    const user = createUser(username, password);
     const token = createSession(user.id);
 
     const response = NextResponse.json({
-      user: { id: user.id, username: user.username, email: user.email, isAdmin: !!user.isAdmin },
+      user: { id: user.id, username: user.username, isAdmin: !!user.isAdmin },
       token,
     });
 

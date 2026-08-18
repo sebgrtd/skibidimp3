@@ -13,7 +13,6 @@ import { Sparkles, Youtube, Music, Radio, Loader2 } from "lucide-react";
 interface UserProfile {
   id: string;
   username: string;
-  email: string;
   isAdmin?: boolean;
 }
 

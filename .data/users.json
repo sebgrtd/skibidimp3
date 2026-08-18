@@ -24,5 +24,13 @@
     "salt": "16a26a29b74695e313df47660f3f3cba",
     "isAdmin": false,
     "createdAt": "2026-08-18T12:51:12.862Z"
+  },
+  {
+    "id": "usr_1787058099977_o2em0",
+    "username": "noemail_099784",
+    "passwordHash": "79bc038f3991f98de1dc041be21a6d8b3d203a5d14e6b572a7039ff5ba8a0abf2637319240e33bac1c74e15b14d6f2da7641cf7dc7a3db99bee45348add0abec",
+    "salt": "049fd723785aadc56368ab797984eb4715da4cb5b049b46176786e0e7f9eb6b0",
+    "isAdmin": false,
+    "createdAt": "2026-08-18T13:01:39.977Z"
   }
 ]

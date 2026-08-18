@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { Lock, Sparkles, User, Mail, Key, LogIn, UserPlus, Loader2, KeyRound, ShieldCheck } from "lucide-react";
+import { Lock, User, Key, LogIn, UserPlus, Loader2, KeyRound, ShieldCheck } from "lucide-react";
 
 interface LockScreenProps {
-  onLoginSuccess: (user: { id: string; username: string; email: string; isAdmin?: boolean }) => void;
+  onLoginSuccess: (user: { id: string; username: string; isAdmin?: boolean }) => void;
 }
 
 export default function LockScreen({ onLoginSuccess }: LockScreenProps) {
@@ -12,7 +12,6 @@ export default function LockScreen({ onLoginSuccess }: LockScreenProps) {
 
   // Form fields
   const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
 
@@ -28,8 +27,8 @@ export default function LockScreen({ onLoginSuccess }: LockScreenProps) {
       const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
       const payload =
         mode === "login"
-          ? { usernameOrEmail: username || email, password }
-          : { username, email, password, inviteCode };
+          ? { username, password }
+          : { username, password, inviteCode };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -71,7 +70,7 @@ export default function LockScreen({ onLoginSuccess }: LockScreenProps) {
             <p className="text-xs font-semibold text-purple-300">
               {mode === "login"
                 ? "Connexion requise pour débloquer le convertisseur"
-                : "Inscription privée par Code d'Invitation obligatoire"}
+                : "Inscription par Code d'Invitation obligatoire"}
             </p>
           </div>
         </div>
@@ -102,70 +101,38 @@ export default function LockScreen({ onLoginSuccess }: LockScreenProps) {
 
         {/* Auth Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === "register" ? (
-            <>
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Nom d'utilisateur</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Ex: SkibidiKing"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 pl-10 text-xs text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none"
-                  />
-                  <User className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
-                </div>
-              </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1">Nom d'utilisateur</label>
+            <div className="relative">
+              <input
+                type="text"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Ex: SkibidiUser"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 pl-10 text-xs text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none"
+              />
+              <User className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+            </div>
+          </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Adresse E-mail</label>
-                <div className="relative">
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Ex: skibidi@exemple.fr"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 pl-10 text-xs text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none"
-                  />
-                  <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Code d'Invitation (Obligatoire)
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    value={inviteCode}
-                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                    placeholder="Ex: SKIBIDI-A8F92C"
-                    className="w-full rounded-xl border border-amber-500/50 bg-slate-950/80 px-4 py-3 pl-10 font-mono text-xs font-bold text-amber-300 placeholder-slate-500 focus:border-amber-400 focus:outline-none"
-                  />
-                  <KeyRound className="absolute left-3 top-3.5 h-4 w-4 text-amber-400" />
-                </div>
-                <span className="text-[10px] text-slate-400 mt-1 block">Demandez un code d'invitation à l'administrateur.</span>
-              </div>
-            </>
-          ) : (
+          {mode === "register" && (
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Nom d'utilisateur ou E-mail</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1">
+                Code d'Invitation (Obligatoire)
+              </label>
               <div className="relative">
                 <input
                   type="text"
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Ex: admin"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 pl-10 text-xs text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  placeholder="Ex: SKIBIDI-A8F92C"
+                  className="w-full rounded-xl border border-amber-500/50 bg-slate-950/80 px-4 py-3 pl-10 font-mono text-xs font-bold text-amber-300 placeholder-slate-500 focus:border-amber-400 focus:outline-none"
                 />
-                <User className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                <KeyRound className="absolute left-3 top-3.5 h-4 w-4 text-amber-400" />
               </div>
+              <span className="text-[10px] text-slate-400 mt-1 block">Demandez un code d'invitation à l'administrateur.</span>
             </div>
           )}
 

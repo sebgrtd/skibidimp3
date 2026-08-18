@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     authenticated: true,
-    user: { id: user.id, username: user.username, email: user.email, isAdmin: !!user.isAdmin },
+    user: { id: user.id, username: user.username, isAdmin: !!user.isAdmin },
   });
 }
 

@@ -9,10 +9,7 @@ import {
   Square, 
   Loader2, 
   Music, 
-  User, 
-  RefreshCw,
-  Sparkles,
-  Trash2
+  RefreshCw
 } from "lucide-react";
 
 export interface SyncedHistoryItem {
@@ -28,7 +25,7 @@ export interface SyncedHistoryItem {
 }
 
 interface UserDashboardProps {
-  user: { id: string; username: string; email: string };
+  user: { id: string; username: string };
   history: SyncedHistoryItem[];
   onRefreshHistory: () => void;
 }
@@ -135,20 +132,20 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6">
       {/* Account Info Header */}
-      <div className="rounded-2xl border border-purple-500/40 bg-slate-900/90 p-6 shadow-2xl space-y-6 backdrop-blur-xl">
+      <div className="rounded-2xl border border-purple-500/40 bg-slate-900/90 p-4 sm:p-6 shadow-2xl space-y-6 backdrop-blur-xl">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3 text-center sm:text-left">
             <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-purple-500/30">
               {user.username.charAt(0).toUpperCase()}
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <h2 className="text-xl font-bold text-white flex items-center justify-center sm:justify-start gap-2">
                 <span>Compte de {user.username}</span>
                 <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] text-emerald-400 font-bold">
                   Synchronisé
                 </span>
               </h2>
-              <p className="text-xs text-slate-400">{user.email} • {history.length} musique(s) sauvegardée(s)</p>
+              <p className="text-xs text-slate-400">{history.length} musique(s) sauvegardée(s)</p>
             </div>
           </div>
 
@@ -164,7 +161,7 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
         {/* Global Controls for Batch Re-download */}
         {history.length > 0 && (
           <div className="pt-4 border-t border-slate-800/80 flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="flex items-center justify-between md:justify-start gap-3 w-full md:w-auto">
               <button
                 type="button"
                 onClick={toggleSelectAll}
@@ -187,13 +184,13 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
               </span>
             </div>
 
-            <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
               {selectedIds.length > 0 && (
                 <button
                   type="button"
                   onClick={() => handleBatchRedownload(false)}
                   disabled={downloadingZip}
-                  className="flex-1 md:flex-initial flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:bg-purple-500 disabled:opacity-50"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:bg-purple-500 disabled:opacity-50"
                 >
                   {downloadingZip ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -208,7 +205,7 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
                 type="button"
                 onClick={() => handleBatchRedownload(true)}
                 disabled={downloadingZip}
-                className="flex-1 md:flex-initial flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 px-6 py-2.5 text-xs font-extrabold text-white shadow-lg shadow-purple-600/30 hover:brightness-110 disabled:opacity-50"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 px-6 py-2.5 text-xs font-extrabold text-white shadow-lg shadow-purple-600/30 hover:brightness-110 disabled:opacity-50"
               >
                 {downloadingZip ? (
                   <>
@@ -218,7 +215,7 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
                 ) : (
                   <>
                     <FileArchive className="h-4 w-4" />
-                    <span>Re-télécharger TOUT Mon Historique (.ZIP)</span>
+                    <span>Re-télécharger TOUT (.ZIP)</span>
                   </>
                 )}
               </button>
@@ -254,7 +251,7 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
               return (
                 <div
                   key={item.id}
-                  className={`flex items-center gap-4 px-5 py-3.5 transition-colors ${
+                  className={`flex items-center gap-3 sm:gap-4 p-3.5 sm:px-5 sm:py-3.5 transition-colors ${
                     isSelected ? "bg-purple-950/20" : "hover:bg-slate-800/40"
                   }`}
                 >
@@ -281,12 +278,12 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-bold text-white truncate">{item.title}</h4>
-                    <p className="text-xs text-slate-400 truncate">{item.artist}</p>
+                    <h4 className="text-xs sm:text-sm font-bold text-white truncate">{item.title}</h4>
+                    <p className="text-[11px] sm:text-xs text-slate-400 truncate">{item.artist}</p>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] font-mono font-bold text-purple-300">
+                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                    <span className="rounded-md border border-purple-500/30 bg-purple-500/10 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-mono font-bold text-purple-300">
                       {item.format.toUpperCase()} {item.bitrate}
                     </span>
 

@@ -5,7 +5,6 @@ import crypto from "crypto";
 export interface User {
   id: string;
   username: string;
-  email: string;
   passwordHash: string;
   salt: string;
   isAdmin?: boolean;
@@ -83,16 +82,23 @@ function writeJson<T>(filePath: string, data: T): void {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
-// Password hashing
+/**
+ * Password Hashing with Scrypt (Secure Key Derivation)
+ * Uses 32-byte salt and 64-byte key length with high memory cost parameters.
+ */
 export function hashPassword(password: string): { hash: string; salt: string } {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  const salt = crypto.randomBytes(32).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString("hex");
   return { hash, salt };
 }
 
 export function verifyPassword(password: string, hash: string, salt: string): boolean {
-  const verifyHash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(verifyHash, "hex"));
+  try {
+    const verifyHash = crypto.scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString("hex");
+    return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(verifyHash, "hex"));
+  } catch {
+    return false;
+  }
 }
 
 function seedAdminUser() {
@@ -101,18 +107,20 @@ function seedAdminUser() {
     const adminUser = users.find((u) => u.username.toLowerCase() === "admin");
 
     if (adminUser) {
+      let updated = false;
       if (!adminUser.isAdmin) {
         adminUser.isAdmin = true;
+        updated = true;
+      }
+      if (updated) {
         fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
       }
     } else {
-      const salt = crypto.randomBytes(16).toString("hex");
-      const hash = crypto.scryptSync("SkibidiAdmin2026!", salt, 64).toString("hex");
+      const { hash, salt } = hashPassword("SkibidiAdmin2026!");
 
       const newAdmin: User = {
         id: "usr_admin_001",
         username: "admin",
-        email: "admin@skibidi-mp3.sebastien-gratade.fr",
         passwordHash: hash,
         salt,
         isAdmin: true,
@@ -126,14 +134,10 @@ function seedAdminUser() {
 }
 
 // Users API
-export function createUser(username: string, email: string, password: string, isAdmin: boolean = false): User {
+export function createUser(username: string, password: string, isAdmin: boolean = false): User {
   const users = readJson<User[]>(USERS_FILE);
-  const normalizedEmail = email.toLowerCase().trim();
   const normalizedUsername = username.trim();
 
-  if (users.some((u) => u.email.toLowerCase() === normalizedEmail)) {
-    throw new Error("Un compte avec cet e-mail existe déjà.");
-  }
   if (users.some((u) => u.username.toLowerCase() === normalizedUsername.toLowerCase())) {
     throw new Error("Ce nom d'utilisateur est déjà pris.");
   }
@@ -142,7 +146,6 @@ export function createUser(username: string, email: string, password: string, is
   const newUser: User = {
     id: "usr_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
     username: normalizedUsername,
-    email: normalizedEmail,
     passwordHash: hash,
     salt,
     isAdmin,
@@ -159,19 +162,16 @@ export function getAllUsers(): Omit<User, "passwordHash" | "salt">[] {
   return users.map(({ passwordHash, salt, ...u }) => u);
 }
 
-export function authenticateUser(usernameOrEmail: string, password: string): User {
+export function authenticateUser(username: string, password: string): User {
   const users = readJson<User[]>(USERS_FILE);
-  const term = usernameOrEmail.toLowerCase().trim();
+  const term = username.toLowerCase().trim();
 
-  const user = users.find(
-    (u) => u.email.toLowerCase() === term || u.username.toLowerCase() === term
-  );
+  const user = users.find((u) => u.username.toLowerCase() === term);
 
   if (!user || !verifyPassword(password, user.passwordHash, user.salt)) {
-    throw new Error("Nom d'utilisateur/Email ou mot de passe incorrect.");
+    throw new Error("Nom d'utilisateur ou mot de passe incorrect.");
   }
 
-  // Ensure admin user always has isAdmin = true
   if (user.username.toLowerCase() === "admin" && !user.isAdmin) {
     user.isAdmin = true;
     writeJson(USERS_FILE, users);

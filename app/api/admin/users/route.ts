@@ -26,14 +26,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { username, email, password } = await req.json();
+    const { username, password } = await req.json();
 
-    if (!username || !email || !password) {
-      return NextResponse.json({ error: "Tous les champs (Nom d'utilisateur, email, mot de passe) sont requis." }, { status: 400 });
+    if (!username || !password) {
+      return NextResponse.json({ error: "Le nom d'utilisateur et le mot de passe sont requis." }, { status: 400 });
     }
 
-    const newUser = createUser(username, email, password);
-    return NextResponse.json({ success: true, user: { id: newUser.id, username: newUser.username, email: newUser.email } });
+    const newUser = createUser(username, password);
+    return NextResponse.json({ success: true, user: { id: newUser.id, username: newUser.username } });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Erreur lors de la création de l'utilisateur." }, { status: 400 });
   }
