@@ -7,62 +7,97 @@ import NodeID3 from "node-id3";
 
 const PYTHON_PATH = process.env.PYTHON_PATH || (process.platform === "win32" ? `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe` : "python3");
 
-async function extractAudioStream(downloadUrl: string, rawTemplate: string): Promise<string> {
+// Helper to detect YouTube bot-block / age-restriction errors (fail fast, don't retry)
+function isYouTubeBlockedError(msg: string): boolean {
+  return msg.includes("Sign in to confirm") ||
+    msg.includes("not a bot") ||
+    msg.includes("confirm your age") ||
+    msg.includes("Skipping unsupported client");
+}
+
+async function singleAttemptDownload(
+  ytDlpCommand: string,
+  ytDlpBaseArgs: string[],
+  target: string,
+  rawTemplate: string,
+  extraFlags: string[],
+  userAgent: string
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const args = [
+      ...ytDlpBaseArgs,
+      "--user-agent", userAgent,
+      "-f", "ba/b",
+      "-x",
+      "-o", rawTemplate,
+      "--no-playlist",
+      ...extraFlags,
+      target,
+    ];
+
+    const proc = spawn(ytDlpCommand, args);
+    let stderr = "";
+
+    proc.stderr.on("data", (chunk) => stderr += chunk.toString());
+
+    proc.on("close", () => {
+      const dirFiles = fs.readdirSync(os.tmpdir());
+      const rawPattern = path.basename(rawTemplate).split(".")[0];
+      // Only accept completed files (not .part files)
+      const match = dirFiles.find(f => f.startsWith(rawPattern) && !f.endsWith(".part"));
+
+      if (match) {
+        resolve(path.join(os.tmpdir(), match));
+      } else {
+        // Clean up any .part files left behind
+        dirFiles.filter(f => f.startsWith(rawPattern)).forEach(f => {
+          try { fs.unlinkSync(path.join(os.tmpdir(), f)); } catch {}
+        });
+        reject(new Error(stderr.trim() || "yt-dlp failed"));
+      }
+    });
+
+    proc.on("error", (err) => reject(err));
+  });
+}
+
+async function extractAudioStream(downloadUrl: string, rawTemplateBase: string): Promise<string> {
   const isModule = PYTHON_PATH.includes("python");
   const ytDlpCommand = isModule ? PYTHON_PATH : "yt-dlp";
   const ytDlpBaseArgs = isModule ? ["-m", "yt_dlp"] : [];
-
   const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
-  const attemptDownload = (target: string, extraFlags: string[]) => {
-    return new Promise<string>((resolve, reject) => {
-      const args = [
-        ...ytDlpBaseArgs,
-        "--user-agent", USER_AGENT,
-        "-f", "ba/b",
-        "-x",
-        "-o", rawTemplate,
-        "--no-playlist",
-        ...extraFlags,
-        target,
-      ];
+  // Generate unique template per attempt to avoid partial file contamination
+  const baseDir = path.dirname(rawTemplateBase);
+  const baseName = path.basename(rawTemplateBase).replace(".%(ext)s", "");
 
-      const proc = spawn(ytDlpCommand, args);
-      let stderr = "";
-
-      proc.stderr.on("data", (chunk) => stderr += chunk.toString());
-
-      proc.on("close", (code) => {
-        const dirFiles = fs.readdirSync(os.tmpdir());
-        const rawPattern = path.basename(rawTemplate).split(".")[0];
-        const match = dirFiles.find(f => f.startsWith(rawPattern));
-
-        if (match) {
-          resolve(path.join(os.tmpdir(), match));
-        } else {
-          reject(new Error(stderr.trim() || `code ${code}`));
-        }
-      });
-
-      proc.on("error", (err) => reject(err));
-    });
+  const attempt = async (suffix: string, flags: string[]) => {
+    const tpl = path.join(baseDir, `${baseName}_${suffix}.%(ext)s`);
+    return singleAttemptDownload(ytDlpCommand, ytDlpBaseArgs, downloadUrl, tpl, flags, USER_AGENT);
   };
 
-  // Attempt 1: android,web,tv clients
+  // Attempt 1: android,web,tv
   try {
-    return await attemptDownload(downloadUrl, ["--extractor-args", "youtube:player_client=android,web,tv"]);
+    return await attempt("a1", ["--extractor-args", "youtube:player_client=android,web,tv"]);
   } catch (err1: any) {
-    console.warn("Download attempt 1 failed:", err1.message?.split("\n")[0]);
+    const msg1 = err1.message || "";
+    console.warn("Download attempt 1 failed:", msg1.split("\n")[0]);
 
-    // Attempt 2: tv_embedded — bypasses age restrictions
+    // Fail fast: don't retry if YouTube is blocking us — let caller use SoundCloud
+    if (isYouTubeBlockedError(msg1)) throw err1;
+
+    // Attempt 2: tv_embedded
     try {
-      return await attemptDownload(downloadUrl, ["--extractor-args", "youtube:player_client=tv_embedded,android,web"]);
+      return await attempt("a2", ["--extractor-args", "youtube:player_client=tv_embedded,android,web"]);
     } catch (err2: any) {
-      console.warn("Download attempt 2 failed:", err2.message?.split("\n")[0]);
+      const msg2 = err2.message || "";
+      console.warn("Download attempt 2 failed:", msg2.split("\n")[0]);
 
-      // Attempt 3: mweb,tv_embedded
+      if (isYouTubeBlockedError(msg2)) throw err2;
+
+      // Attempt 3: mweb
       try {
-        return await attemptDownload(downloadUrl, ["--extractor-args", "youtube:player_client=mweb,tv_embedded"]);
+        return await attempt("a3", ["--extractor-args", "youtube:player_client=mweb,tv_embedded"]);
       } catch (err3: any) {
         console.warn("Download attempt 3 failed:", err3.message?.split("\n")[0]);
         throw err3;
@@ -70,6 +105,7 @@ async function extractAudioStream(downloadUrl: string, rawTemplate: string): Pro
     }
   }
 }
+
 
 export async function POST(req: NextRequest) {
   const tmpFiles: string[] = [];
