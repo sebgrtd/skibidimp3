@@ -13,9 +13,22 @@ async function extractAudioStream(downloadUrl: string, rawTemplate: string): Pro
   const ytDlpCommand = isModule ? PYTHON_PATH : "yt-dlp";
   const ytDlpBaseArgs = isModule ? ["-m", "yt_dlp"] : [];
 
-  // Try standard execution first with remote components and fallback clients
-  const attemptDownload = (args: string[]) => {
+  const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+
+  const attemptDownload = (extraFlags: string[]) => {
     return new Promise<string>((resolve, reject) => {
+      const args = [
+        ...ytDlpBaseArgs,
+        "--user-agent", USER_AGENT,
+        "--remote-components", "ejs:github",
+        "-f", "ba/b",
+        "-x",
+        "-o", rawTemplate,
+        "--no-playlist",
+        ...extraFlags,
+        downloadUrl,
+      ];
+
       const proc = spawn(ytDlpCommand, args);
       let stderr = "";
 
@@ -37,36 +50,21 @@ async function extractAudioStream(downloadUrl: string, rawTemplate: string): Pro
     });
   };
 
-  // Primary flags
-  const primaryArgs = [
-    ...ytDlpBaseArgs,
-    "--js-runtimes", `node:${NODE_PATH}`,
-    "--remote-components", "ejs:github",
-    "-f", "ba/b",
-    "-x",
-    "-o", rawTemplate,
-    "--no-playlist",
-    downloadUrl,
-  ];
-
+  // Attempt 1: Standard extraction with user agent and remote components
   try {
-    return await attemptDownload(primaryArgs);
+    return await attemptDownload([]);
   } catch (err: any) {
-    console.warn("Premier essai yt-dlp échoué:", err.message);
+    console.warn("Attempt 1 yt-dlp failed:", err.message);
 
-    // If bot check or DRM error occurs, retry with alternative player client
-    const fallbackArgs = [
-      ...ytDlpBaseArgs,
-      "--js-runtimes", `node:${NODE_PATH}`,
-      "--extractor-args", "youtube:player_client=mweb,tv,web",
-      "-f", "ba/b",
-      "-x",
-      "-o", rawTemplate,
-      "--no-playlist",
-      downloadUrl,
-    ];
+    // Attempt 2: Fallback with player_client=mweb,tv,web
+    try {
+      return await attemptDownload(["--extractor-args", "youtube:player_client=mweb,tv,web"]);
+    } catch (err2: any) {
+      console.warn("Attempt 2 yt-dlp failed:", err2.message);
 
-    return await attemptDownload(fallbackArgs);
+      // Attempt 3: Fallback with player_client=ios,web_creator
+      return await attemptDownload(["--extractor-args", "youtube:player_client=ios,web_creator"]);
+    }
   }
 }
 
@@ -93,13 +91,12 @@ export async function POST(req: NextRequest) {
     const trimmedUrl = url.trim();
     let downloadTargetUrl = trimmedUrl;
 
-    // Handle Spotify links: Convert to YouTube search to bypass DRM error
+    // Handle Spotify links: Convert to YouTube search query to bypass Spotify DRM error
     if (trimmedUrl.includes("spotify.com")) {
       const searchTerms = [metadata.artist, metadata.title].filter(Boolean).join(" ");
       if (searchTerms.trim()) {
         downloadTargetUrl = `ytsearch1:${searchTerms} audio`;
       } else {
-        // Fallback: extract track name from URL if possible
         const trackMatch = trimmedUrl.match(/track\/([a-zA-Z0-9]+)/);
         if (trackMatch) {
           downloadTargetUrl = `ytsearch1:spotify track ${trackMatch[1]} audio`;

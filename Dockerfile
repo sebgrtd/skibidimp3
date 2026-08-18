@@ -2,7 +2,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache python3 py3-pip ffmpeg curl
+RUN apk add --no-cache python3 py3-pip ffmpeg curl deno
 
 RUN python3 -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir yt-dlp
@@ -26,7 +26,7 @@ ENV PORT=3030
 ENV PYTHON_PATH=/opt/venv/bin/python3
 ENV NODE_PATH=/usr/local/bin/node
 
-RUN apk add --no-cache python3 py3-pip ffmpeg curl
+RUN apk add --no-cache python3 py3-pip ffmpeg curl deno
 
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
