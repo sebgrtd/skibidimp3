@@ -49,13 +49,13 @@ const TEST_LINKS: DiagnosticTestItem[] = [
   {
     platform: "Twitter / X",
     name: "Twitter/X - Image PNG HD",
-    url: "https://twitter.com/Twitter/status/1780000000000000000",
+    url: "https://twitter.com/TheEllenShow/status/440322224407314432",
     format: "png",
   },
   {
     platform: "TikTok",
     name: "TikTok - Vidéo MP4",
-    url: "https://www.tiktok.com/@tiktok/video/7106594312292453678",
+    url: "https://www.tiktok.com/@scout2015/video/6718335390845095173",
     format: "mp4",
   },
   {

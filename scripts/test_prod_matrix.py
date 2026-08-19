@@ -51,15 +51,15 @@ TEST_CASES = [
     },
     {
         "platform": "Twitter / X",
-        "type": "Post / Image PNG",
+        "type": "Image PNG HD",
         "format": "png",
-        "url": "https://twitter.com/Twitter/status/1780000000000000000",
+        "url": "https://twitter.com/TheEllenShow/status/440322224407314432",
     },
     {
         "platform": "TikTok",
         "type": "Video MP4",
         "format": "mp4",
-        "url": "https://www.tiktok.com/@tiktok/video/7106594312292453678",
+        "url": "https://www.tiktok.com/@scout2015/video/6718335390845095173",
     },
     {
         "platform": "YouTube",
