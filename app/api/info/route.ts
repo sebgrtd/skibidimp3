@@ -130,6 +130,26 @@ async function fetchVimeoMedia(trimmedUrl: string): Promise<{ title: string; art
   }
 }
 
+// Fallback for SoundCloud oEmbed
+async function fetchSoundCloudViaOEmbed(trimmedUrl: string): Promise<{ title: string; artist: string; thumbnail: string | null; duration: number } | null> {
+  try {
+    const oEmbedUrl = `https://soundcloud.com/oembed?format=json&url=${encodeURIComponent(trimmedUrl)}`;
+    const res = await fetch(oEmbedUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      title: data.title || "Titre SoundCloud",
+      artist: data.author_name || "SoundCloud",
+      thumbnail: data.thumbnail_url || null,
+      duration: 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Fallback for Pinterest HTML Scraper (High-Res Images & Videos)
 async function fetchPinterestMedia(trimmedUrl: string): Promise<{ title: string; artist: string; thumbnail: string | null; imageUrl?: string; videoUrl?: string; isVideo: boolean } | null> {
   try {
@@ -440,6 +460,29 @@ export async function POST(req: NextRequest) {
           });
         }
       }
+
+      // Fallback for SoundCloud via oEmbed
+      if (platform === "soundcloud") {
+        const scData = await fetchSoundCloudViaOEmbed(trimmedUrl);
+        if (scData) {
+          return NextResponse.json({
+            platform: "soundcloud",
+            isPlaylist: false,
+            title: scData.title,
+            artist: scData.artist,
+            thumbnail: scData.thumbnail,
+            duration: 0,
+            url: trimmedUrl,
+            originalUrl: trimmedUrl,
+            mediaType: "audio",
+            hasVideo: false,
+            hasAudio: true,
+            hasImage: false,
+            availableFormats: ["mp3", "flac", "wav", "m4a", "ogg"],
+          });
+        }
+      }
+
       throw ytdlpErr;
     }
 

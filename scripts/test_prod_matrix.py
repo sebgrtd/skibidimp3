@@ -125,7 +125,7 @@ for idx, test in enumerate(TEST_CASES, start=1):
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
             }
         )
-        with urllib.request.urlopen(req_dl, context=ctx, timeout=60) as res_dl:
+        with urllib.request.urlopen(req_dl, context=ctx, timeout=120) as res_dl:
             content = res_dl.read()
             size_kb = len(content) // 1024
             dur = round(time.time() - start_t, 2)

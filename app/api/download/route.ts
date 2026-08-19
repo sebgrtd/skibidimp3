@@ -229,8 +229,8 @@ export async function POST(req: NextRequest) {
         // Universal MP4 H.264 / AAC conversion with faststart for instant streaming
         ffmpegArgs.push(
           "-c:v", "libx264",
-          "-preset", "fast",
-          "-crf", "22",
+          "-preset", "ultrafast",
+          "-crf", "23",
           "-c:a", "aac",
           "-b:a", "192k",
           "-movflags", "+faststart",
