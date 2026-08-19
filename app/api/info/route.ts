@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "child_process";
+import fs from "fs";
+import path from "path";
 
 const PYTHON_PATH = process.env.PYTHON_PATH || (process.platform === "win32" ? `C:\\Users\\Sébastien\\AppData\\Local\\Programs\\Python\\Python313\\python.exe` : "python3");
+
+const DATA_DIR = path.join(process.cwd(), ".data");
+const COOKIES_FILE = path.join(DATA_DIR, "cookies.txt");
+const ALT_COOKIES = path.join(process.cwd(), "cookies.txt");
 
 export type PlatformType = 
   | "youtube" 
@@ -17,7 +23,14 @@ export type PlatformType =
 function runYtDlp(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const isModule = PYTHON_PATH.includes("python");
-    const fullArgs = isModule ? ["-m", "yt_dlp", ...args] : args;
+    const cookieArgs: string[] = [];
+    if (fs.existsSync(COOKIES_FILE)) {
+      cookieArgs.push("--cookies", COOKIES_FILE);
+    } else if (fs.existsSync(ALT_COOKIES)) {
+      cookieArgs.push("--cookies", ALT_COOKIES);
+    }
+
+    const fullArgs = isModule ? ["-m", "yt_dlp", ...cookieArgs, ...args] : [...cookieArgs, ...args];
     const command = isModule ? PYTHON_PATH : "yt-dlp";
 
     const proc = spawn(command, fullArgs);
@@ -393,7 +406,21 @@ export async function POST(req: NextRequest) {
       throw ytdlpErr;
     }
 
-    const info = JSON.parse(stdout);
+    let info: any;
+    try {
+      info = JSON.parse(stdout);
+    } catch {
+      const lines = stdout.split("\n").map(l => l.trim()).filter(Boolean);
+      for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+          info = JSON.parse(lines[i]);
+          break;
+        } catch {}
+      }
+      if (!info) {
+        throw new Error("Impossible d'extraire les métadonnées vidéo.");
+      }
+    }
 
     // Playlist detection
     if (info._type === "playlist" || (info.entries && Array.isArray(info.entries))) {

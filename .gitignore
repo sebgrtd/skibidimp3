@@ -33,7 +33,7 @@ yarn-error.log*
 next-env.d.json
 
 # test generated files & temp files
-test_*
+/test_*
 scratch/
 .data/
 *.mp3

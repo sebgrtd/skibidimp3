@@ -15,6 +15,9 @@ function isYouTubeBlockedError(msg: string): boolean {
     msg.includes("Skipping unsupported client");
 }
 
+const COOKIES_FILE = path.join(process.cwd(), ".data", "cookies.txt");
+const ALT_COOKIES = path.join(process.cwd(), "cookies.txt");
+
 // Single attempt audio/video download with yt-dlp
 async function singleAttemptDownload(
   ytDlpCommand: string,
@@ -27,8 +30,16 @@ async function singleAttemptDownload(
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const formatArg = isVideo ? ["-f", "bv*+ba/b", "--merge-output-format", "mp4"] : ["-f", "ba/b", "-x"];
+    const cookieArgs: string[] = [];
+    if (fs.existsSync(COOKIES_FILE)) {
+      cookieArgs.push("--cookies", COOKIES_FILE);
+    } else if (fs.existsSync(ALT_COOKIES)) {
+      cookieArgs.push("--cookies", ALT_COOKIES);
+    }
+
     const args = [
       ...ytDlpBaseArgs,
+      ...cookieArgs,
       "--user-agent", userAgent,
       ...formatArg,
       "-o", rawTemplate,
@@ -414,8 +425,13 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    let errMsg = error.message || "Une erreur est survenue lors de la génération du fichier.";
+    if (isYouTubeBlockedError(errMsg)) {
+      errMsg = "YouTube bloque les téléchargements automatisés sur ce serveur d'hébergement. Veuillez configurer vos cookies YouTube dans le panneau d'Administration (/admin > Cookies YouTube) pour débloquer le service.";
+    }
+
     return NextResponse.json(
-      { error: error.message || "Une erreur est survenue lors de la génération du fichier." },
+      { error: errMsg },
       { status: 500 }
     );
   }

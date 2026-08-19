@@ -16,7 +16,13 @@ import {
   ShieldAlert, 
   CheckCircle2, 
   Clock, 
-  UserCheck 
+  UserCheck,
+  Cookie,
+  FileText,
+  UploadCloud,
+  AlertTriangle,
+  Activity,
+  Play
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -42,7 +48,7 @@ export default function AdminPage() {
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string; isAdmin?: boolean } | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<"invites" | "create-user" | "users" | "security">("invites");
+  const [activeTab, setActiveTab] = useState<"invites" | "create-user" | "users" | "security" | "cookies" | "diagnostics">("invites");
 
   // Invite Codes State
   const [invites, setInvites] = useState<InviteCodeItem[]>([]);
@@ -66,6 +72,17 @@ export default function AdminPage() {
   const [confirmAdminPass, setConfirmAdminPass] = useState("");
   const [changingPass, setChangingPass] = useState(false);
 
+  // Cookies YouTube Anti-Bot State
+  const [cookiesInfo, setCookiesInfo] = useState<{ hasCookies: boolean; size: number; lastModified: string | null } | null>(null);
+  const [loadingCookies, setLoadingCookies] = useState(false);
+  const [cookiesInput, setCookiesInput] = useState("");
+  const [savingCookies, setSavingCookies] = useState(false);
+  const [showDeleteCookiesModal, setShowDeleteCookiesModal] = useState(false);
+
+  // Platform Diagnostics State
+  const [diagTests, setDiagTests] = useState<any[]>([]);
+  const [runningDiag, setRunningDiag] = useState(false);
+
   // Verify auth session
   useEffect(() => {
     const verifyAdmin = async () => {
@@ -77,6 +94,8 @@ export default function AdminPage() {
           if (data.user.isAdmin) {
             fetchInvites();
             fetchUsers();
+            fetchCookiesStatus();
+            fetchDiagnosticsList();
           }
         } else {
           setCurrentUser(null);
@@ -238,6 +257,113 @@ export default function AdminPage() {
     }
   };
 
+  const fetchCookiesStatus = async () => {
+    setLoadingCookies(true);
+    try {
+      const res = await fetch("/api/admin/cookies");
+      if (res.ok) {
+        const data = await res.json();
+        setCookiesInfo(data);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingCookies(false);
+    }
+  };
+
+  const handleSaveCookies = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cookiesInput.trim()) {
+      toast.error("Veuillez coller le contenu de vos cookies.");
+      return;
+    }
+
+    setSavingCookies(true);
+    try {
+      const res = await fetch("/api/admin/cookies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cookiesContent: cookiesInput.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Impossible d'enregistrer les cookies.");
+
+      toast.success("Cookies YouTube enregistrés avec succès !");
+      setCookiesInput("");
+      fetchCookiesStatus();
+    } catch (err: any) {
+      toast.error(err.message || "Erreur de sauvegarde.");
+    } finally {
+      setSavingCookies(false);
+    }
+  };
+
+  const fetchDiagnosticsList = async () => {
+    try {
+      const res = await fetch("/api/admin/diagnostics");
+      if (res.ok) {
+        const data = await res.json();
+        setDiagTests(data.tests || []);
+      }
+    } catch {}
+  };
+
+  const handleRunAllDiagnostics = async () => {
+    if (diagTests.length === 0) return;
+    setRunningDiag(true);
+
+    const updated = [...diagTests].map((t) => ({ ...t, status: "pending", message: undefined, error: undefined }));
+    setDiagTests(updated);
+
+    for (let i = 0; i < updated.length; i++) {
+      const item = updated[i];
+      item.status = "running";
+      setDiagTests([...updated]);
+
+      try {
+        const res = await fetch("/api/admin/diagnostics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: item.url, format: item.format }),
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          item.status = "success";
+          item.durationMs = data.durationMs;
+          item.fileSizeBytes = data.fileSizeBytes;
+          item.message = `${Math.round((data.fileSizeBytes || 0) / 1024)} Ko en ${((data.durationMs || 0) / 1000).toFixed(1)}s`;
+        } else {
+          item.status = "error";
+          item.durationMs = data.durationMs;
+          item.error = data.error || "Erreur de téléchargement";
+        }
+      } catch (err: any) {
+        item.status = "error";
+        item.error = err.message || "Erreur réseau";
+      }
+
+      setDiagTests([...updated]);
+    }
+
+    setRunningDiag(false);
+    toast.success("Diagnostic complet terminé !");
+  };
+
+  const handleConfirmDeleteCookies = async () => {
+    try {
+      const res = await fetch("/api/admin/cookies", { method: "DELETE" });
+      if (!res.ok) throw new Error("Erreur de suppression.");
+      toast.info("Cookies YouTube supprimés.");
+      setShowDeleteCookiesModal(false);
+      fetchCookiesStatus();
+    } catch (err: any) {
+      toast.error(err.message || "Impossible de supprimer les cookies.");
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-100">
@@ -364,6 +490,35 @@ export default function AdminPage() {
           >
             <KeyRound className="h-4 w-4 text-rose-400" />
             <span>Mon Mot de Passe</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("cookies")}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg transition-all shrink-0 ${
+              activeTab === "cookies"
+                ? "bg-zinc-800 text-zinc-100 border border-zinc-700 shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50"
+            }`}
+          >
+            <Cookie className="h-4 w-4 text-amber-400" />
+            <span>Cookies Anti-Bot</span>
+            {cookiesInfo?.hasCookies && (
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("diagnostics")}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg transition-all shrink-0 ${
+              activeTab === "diagnostics"
+                ? "bg-zinc-800 text-zinc-100 border border-zinc-700 shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50"
+            }`}
+          >
+            <Activity className="h-4 w-4 text-cyan-400" />
+            <span>Diagnostics & Tests</span>
           </button>
         </div>
 
@@ -651,6 +806,215 @@ export default function AdminPage() {
             </form>
           </div>
         )}
+
+        {/* Tab 5: Cookies YouTube Anti-Bot */}
+        {activeTab === "cookies" && (
+          <div className="max-w-2xl mx-auto space-y-6">
+            {/* Status Card */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 space-y-4 shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+                <div className="space-y-1">
+                  <h3 className="text-base font-semibold text-zinc-100 flex items-center gap-2">
+                    <Cookie className="h-5 w-5 text-amber-400" />
+                    <span>Cookies YouTube & Contournement Anti-Bot</span>
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Permet au serveur d'hébergement de télécharger des vidéos et musiques YouTube sans être bloqué par la protection anti-robot.
+                  </p>
+                </div>
+
+                <div className="shrink-0">
+                  {loadingCookies ? (
+                    <div className="flex items-center gap-2 text-xs text-zinc-400">
+                      <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                      <span>Vérification...</span>
+                    </div>
+                  ) : cookiesInfo?.hasCookies ? (
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Cookies Actifs ({Math.round((cookiesInfo.size || 0) / 1024)} Ko)</span>
+                    </div>
+                  ) : (
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span>Aucun Cookie Configuré</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {cookiesInfo?.hasCookies && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80 text-xs">
+                  <div className="flex items-center gap-2 text-zinc-300">
+                    <FileText className="h-4 w-4 text-indigo-400" />
+                    <span>Fichier <code className="font-mono text-zinc-100">cookies.txt</code> actif</span>
+                    {cookiesInfo.lastModified && (
+                      <span className="text-[11px] text-zinc-500">
+                        (mis à jour le {new Date(cookiesInfo.lastModified).toLocaleDateString("fr-FR")})
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteCookiesModal(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Supprimer</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Form to import / paste cookies */}
+              <form onSubmit={handleSaveCookies} className="space-y-4 pt-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
+                    <span>{cookiesInfo?.hasCookies ? "Remplacer les cookies (Format Netscape / cookies.txt)" : "Coller le contenu de votre fichier cookies.txt"}</span>
+                  </label>
+                  <textarea
+                    rows={6}
+                    required
+                    value={cookiesInput}
+                    onChange={(e) => setCookiesInput(e.target.value)}
+                    placeholder="# Netscape HTTP Cookie File&#10;.youtube.com&#9;TRUE&#9;/&#9;TRUE&#9;1789000000&#9;SID&#9;..."
+                    className="w-full font-mono text-[11px] rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-zinc-100 placeholder:text-zinc-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all resize-y"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <label className="cursor-pointer inline-flex items-center gap-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3.5 py-2.5 text-xs font-semibold text-zinc-200 transition-all">
+                    <UploadCloud className="h-4 w-4 text-indigo-400" />
+                    <span>Importer un fichier .txt</span>
+                    <input
+                      type="file"
+                      accept=".txt"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const text = event.target?.result as string;
+                            if (text) setCookiesInput(text);
+                          };
+                          reader.readAsText(file);
+                        }
+                      }}
+                    />
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={savingCookies || !cookiesInput.trim()}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50 transition-all"
+                  >
+                    {savingCookies ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                    <span>Enregistrer les Cookies</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Guide Card */}
+            <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/30 p-5 space-y-3 text-xs text-zinc-400">
+              <h4 className="font-semibold text-zinc-200 flex items-center gap-2">
+                <span>💡 Comment exporter vos cookies YouTube en 30 secondes ?</span>
+              </h4>
+              <ol className="list-decimal list-inside space-y-1.5 text-zinc-400 text-[11px] leading-relaxed">
+                <li>Installez l'extension gratuite Chrome/Firefox <strong className="text-zinc-200">« Get cookies.txt LOCALLY »</strong>.</li>
+                <li>Rendez-vous sur <strong className="text-zinc-200">youtube.com</strong> en étant connecté à votre compte.</li>
+                <li>Cliquez sur l'icône de l'extension et appuyez sur <strong className="text-zinc-200">« Export »</strong>.</li>
+                <li>Ouvrez le fichier texte téléchargé, copiez tout son contenu et collez-le dans le formulaire ci-dessus.</li>
+              </ol>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 6: Diagnostics & Tests Plateformes */}
+        {activeTab === "diagnostics" && (
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 shadow-xl">
+              <div className="space-y-1">
+                <h3 className="text-base font-semibold text-zinc-100 flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-cyan-400" />
+                  <span>Banc de Test & Diagnostic des Téléchargements</span>
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Exécute une série de tests réels de bout en bout sur l'ensemble des plateformes et formats supportés.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleRunAllDiagnostics}
+                disabled={runningDiag || diagTests.length === 0}
+                className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 px-5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-cyan-600/20 disabled:opacity-50 transition-all shrink-0"
+              >
+                {runningDiag ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4 fill-white" />
+                )}
+                <span>{runningDiag ? "Test en cours..." : "Lancer tous les Tests"}</span>
+              </button>
+            </div>
+
+            {/* Test Matrix Table */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 overflow-hidden shadow-xl">
+              <div className="divide-y divide-zinc-800/60">
+                {diagTests.map((test, i) => (
+                  <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3 text-xs hover:bg-zinc-800/20 transition-colors">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-zinc-200">{test.name}</span>
+                        <span className="px-2 py-0.5 rounded-md bg-zinc-800 border border-zinc-700 text-[10px] uppercase font-mono font-bold text-zinc-300">
+                          {test.format}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-zinc-500 font-mono truncate max-w-lg">
+                        {test.url}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      {test.status === "running" && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-[11px] font-semibold">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Test en cours...</span>
+                        </span>
+                      )}
+
+                      {test.status === "success" && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-semibold">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          <span>{test.message || "Succès"}</span>
+                        </span>
+                      )}
+
+                      {test.status === "error" && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[11px] font-semibold max-w-xs truncate" title={test.error}>
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{test.error || "Échec"}</span>
+                        </span>
+                      )}
+
+                      {(!test.status || test.status === "pending") && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-800/80 border border-zinc-700 text-zinc-400 text-[11px]">
+                          <Clock className="h-3.5 w-3.5" />
+                          <span>En attente</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Confirmation Modal for Delete Code */}
@@ -661,6 +1025,16 @@ export default function AdminPage() {
         confirmLabel="Supprimer définitivement"
         onConfirm={handleConfirmDeleteCode}
         onCancel={() => setDeleteCodeId(null)}
+      />
+
+      {/* Confirmation Modal for Delete Cookies */}
+      <ConfirmModal
+        isOpen={showDeleteCookiesModal}
+        title="Supprimer les cookies YouTube"
+        message="Êtes-vous certain de vouloir supprimer les cookies enregistrés ? Les téléchargements YouTube risquent d'être à nouveau bloqués par les contrôles anti-bot."
+        confirmLabel="Supprimer les cookies"
+        onConfirm={handleConfirmDeleteCookies}
+        onCancel={() => setShowDeleteCookiesModal(false)}
       />
     </div>
   );
