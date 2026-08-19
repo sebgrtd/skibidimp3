@@ -73,20 +73,57 @@ async function fetchYouTubeViaOEmbed(trimmedUrl: string): Promise<{ title: strin
   }
 }
 
-// Fallback for Vimeo oEmbed
-async function fetchVimeoViaOEmbed(trimmedUrl: string): Promise<{ title: string; artist: string; thumbnail: string | null; duration: number } | null> {
+// Fallback for Vimeo direct player config & HLS stream
+async function fetchVimeoMedia(trimmedUrl: string): Promise<{ title: string; artist: string; thumbnail: string | null; duration: number; videoUrl?: string } | null> {
   try {
-    const oEmbedUrl = `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(trimmedUrl)}`;
-    const res = await fetch(oEmbedUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+    const idMatch = trimmedUrl.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/[^\/]*\/videos\/|album\/(?:\d+\/)?video\/|video\/|)(\d+)/);
+    const vimeoId = idMatch ? idMatch[1] : null;
+    if (!vimeoId) return null;
+
+    const iframeUrl = `https://player.vimeo.com/video/${vimeoId}`;
+    const res = await fetch(iframeUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Referer": "https://vimeo.com/"
+      }
     });
+
     if (!res.ok) return null;
-    const data = await res.json();
+    const html = await res.text();
+    const prefix = "window.playerConfig = ";
+    const startIdx = html.indexOf(prefix);
+    if (startIdx === -1) return null;
+
+    const jsonStart = startIdx + prefix.length;
+    let depth = 0;
+    let jsonEnd = jsonStart;
+    for (let i = jsonStart; i < html.length; i++) {
+      if (html[i] === "{") depth++;
+      else if (html[i] === "}") {
+        depth--;
+        if (depth === 0) {
+          jsonEnd = i + 1;
+          break;
+        }
+      }
+    }
+
+    const data = JSON.parse(html.substring(jsonStart, jsonEnd));
+    const title = data.video?.title || "Vidéo Vimeo";
+    const artist = data.video?.owner?.name || data.video?.author_name || "Vimeo";
+    const duration = data.video?.duration || 0;
+    const thumbnail = data.video?.thumbs?.["640"] || data.video?.thumbs?.base || null;
+
+    const hls = data.request?.files?.hls;
+    const cdns = hls?.cdns || {};
+    const videoUrl = cdns.fastly_skyfire?.url || cdns.akfire_interconnect_quic?.url || hls?.default_cdn;
+
     return {
-      title: data.title || "Vidéo Vimeo",
-      artist: data.author_name || "Vimeo",
-      thumbnail: data.thumbnail_url || null,
-      duration: data.duration || 0,
+      title,
+      artist,
+      thumbnail,
+      duration,
+      videoUrl,
     };
   } catch {
     return null;
@@ -352,7 +389,7 @@ export async function POST(req: NextRequest) {
 
     // --- VIMEO ---
     if (platform === "vimeo") {
-      const vimeoData = await fetchVimeoViaOEmbed(trimmedUrl);
+      const vimeoData = await fetchVimeoMedia(trimmedUrl);
       if (vimeoData) {
         return NextResponse.json({
           platform: "vimeo",
@@ -361,7 +398,7 @@ export async function POST(req: NextRequest) {
           artist: vimeoData.artist,
           duration: vimeoData.duration,
           thumbnail: vimeoData.thumbnail,
-          url: trimmedUrl,
+          url: vimeoData.videoUrl || trimmedUrl,
           originalUrl: trimmedUrl,
           mediaType: "video",
           hasVideo: true,

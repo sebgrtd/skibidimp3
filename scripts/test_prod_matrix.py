@@ -41,13 +41,13 @@ TEST_CASES = [
         "platform": "SoundCloud",
         "type": "Audio MP3",
         "format": "mp3",
-        "url": "https://soundcloud.com/alanwalker/alan-walker-faded",
+        "url": "https://soundcloud.com/postmalone/circles",
     },
     {
         "platform": "Vimeo",
         "type": "Video MP4",
         "format": "mp4",
-        "url": "https://vimeo.com/76979871",
+        "url": "https://vimeo.com/22439234",
     },
     {
         "platform": "Pinterest",

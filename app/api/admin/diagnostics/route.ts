@@ -37,13 +37,13 @@ const TEST_LINKS: DiagnosticTestItem[] = [
   {
     platform: "SoundCloud",
     name: "SoundCloud - Audio MP3 Direct",
-    url: "https://soundcloud.com/alanwalker/alan-walker-faded",
+    url: "https://soundcloud.com/postmalone/circles",
     format: "mp3",
   },
   {
     platform: "Vimeo",
     name: "Vimeo - Vidéo MP4 HD",
-    url: "https://vimeo.com/76979871",
+    url: "https://vimeo.com/22439234",
     format: "mp4",
   },
   {

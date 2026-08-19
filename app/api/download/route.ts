@@ -187,8 +187,10 @@ export async function POST(req: NextRequest) {
       const rawTemplate = path.join(os.tmpdir(), `${rawPattern}.%(ext)s`);
 
       let downloadedRaw = "";
-      // If direct video url passed (e.g. from Twitter/Pinterest)
-      if (trimmedUrl.startsWith("http") && (trimmedUrl.includes(".mp4") || trimmedUrl.includes("video.twimg.com") || trimmedUrl.includes("v.pinimg.com"))) {
+      // If direct video url or HLS stream passed (e.g. from Vimeo / Twitter / Pinterest)
+      if (trimmedUrl.startsWith("http") && (trimmedUrl.includes("vimeocdn.com") || trimmedUrl.includes(".m3u8"))) {
+        downloadedRaw = trimmedUrl;
+      } else if (trimmedUrl.startsWith("http") && (trimmedUrl.includes(".mp4") || trimmedUrl.includes("video.twimg.com") || trimmedUrl.includes("v.pinimg.com"))) {
         const vidRes = await fetch(trimmedUrl);
         if (!vidRes.ok) throw new Error("Impossible de télécharger le flux vidéo direct.");
         const directPath = path.join(os.tmpdir(), `${rawPattern}.mp4`);
@@ -202,6 +204,9 @@ export async function POST(req: NextRequest) {
 
       // FFmpeg processing for Video / GIF
       const ffmpegArgs: string[] = ["-y"];
+      if (downloadedRaw.startsWith("http")) {
+        ffmpegArgs.push("-headers", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\nReferer: https://vimeo.com/\r\n");
+      }
 
       if (startTime && !isNaN(Number(startTime)) && Number(startTime) > 0) {
         ffmpegArgs.push("-ss", String(startTime));
@@ -288,25 +293,32 @@ export async function POST(req: NextRequest) {
     const rawTemplate = path.join(os.tmpdir(), `${rawPattern}.%(ext)s`);
 
     let downloadedRaw = "";
-    try {
-      downloadedRaw = await extractMediaStream(downloadTargetUrl, rawTemplate, false);
-      tmpFiles.push(downloadedRaw);
-    } catch (extractErr: any) {
-      const searchTitle = metadata.title || "music";
-      const searchArtist = metadata.artist || "";
-      const searchTerms = `${searchArtist} ${searchTitle}`.trim();
-
-      console.log("Tentative de secours audio via SoundCloud scsearch5:", searchTerms);
+    if (trimmedUrl.startsWith("http") && (trimmedUrl.includes("vimeocdn.com") || trimmedUrl.includes(".m3u8"))) {
+      downloadedRaw = trimmedUrl;
+    } else {
       try {
-        downloadedRaw = await extractMediaStream(`scsearch5:${searchTerms}`, rawTemplate, false);
+        downloadedRaw = await extractMediaStream(downloadTargetUrl, rawTemplate, false);
         tmpFiles.push(downloadedRaw);
-      } catch (scErr: any) {
-        throw extractErr;
+      } catch (extractErr: any) {
+        const searchTitle = metadata.title || "music";
+        const searchArtist = metadata.artist || "";
+        const searchTerms = `${searchArtist} ${searchTitle}`.trim();
+
+        console.log("Tentative de secours audio via SoundCloud scsearch5:", searchTerms);
+        try {
+          downloadedRaw = await extractMediaStream(`scsearch5:${searchTerms}`, rawTemplate, false);
+          tmpFiles.push(downloadedRaw);
+        } catch (scErr: any) {
+          throw extractErr;
+        }
       }
     }
 
     // FFmpeg Audio Processing
     const ffmpegArgs: string[] = ["-y"];
+    if (downloadedRaw.startsWith("http")) {
+      ffmpegArgs.push("-headers", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\nReferer: https://vimeo.com/\r\n");
+    }
 
     if (startTime && !isNaN(Number(startTime)) && Number(startTime) > 0) {
       ffmpegArgs.push("-ss", String(startTime));
