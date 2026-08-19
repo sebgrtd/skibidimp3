@@ -447,7 +447,7 @@ export async function POST(req: NextRequest) {
     // --- SPOTIFY ---
     if (platform === "spotify") {
       try {
-        const match = trimmedUrl.match(/spotify\.com\/(track|playlist|album)\/([a-zA-Z0-9]+)/);
+        const match = trimmedUrl.match(/spotify\.com\/(?:[a-zA-Z0-9_-]+\/)*(track|playlist|album|artist)\/([a-zA-Z0-9]+)/i);
         if (match) {
           const [, type, id] = match;
           const embedUrl = `https://open.spotify.com/embed/${type}/${id}`;
@@ -466,10 +466,10 @@ export async function POST(req: NextRequest) {
               if (entity) {
                 if (type === "playlist" || type === "album") {
                   const rawTracks = entity.trackList || entity.tracks || [];
-                  const defaultAlbumArtist = entity.subtitle || (entity.artists ? entity.artists.map((a: any) => a.name).join(", ") : "Spotify");
+                  const defaultAlbumArtist = entity.subtitle || (entity.artists ? (Array.isArray(entity.artists) ? entity.artists.map((a: any) => typeof a === "string" ? a : (a.name || "")).join(", ") : entity.artists) : "Spotify");
                   const entries = rawTracks.map((t: any, idx: number) => {
                     const trackId = t.id || (t.uri ? t.uri.split(":").pop() : null) || `track_${idx}`;
-                    const trackArtist = t.artists ? t.artists.map((a: any) => a.name).join(", ") : (t.subtitle || defaultAlbumArtist);
+                    const trackArtist = t.artists ? (Array.isArray(t.artists) ? t.artists.map((a: any) => typeof a === "string" ? a : (a.name || "")).join(", ") : t.artists) : (t.subtitle || defaultAlbumArtist);
                     const trackTitle = t.title || t.name || `Piste ${idx + 1}`;
                     const trackUrl = trackId && !trackId.startsWith("track_") 
                       ? `https://open.spotify.com/track/${trackId}` 
@@ -507,7 +507,7 @@ export async function POST(req: NextRequest) {
 
                 // Single track
                 const trackTitle = entity.title || entity.name;
-                const artistName = entity.artists?.[0]?.name || entity.subtitle || "";
+                const artistName = entity.artists ? (Array.isArray(entity.artists) ? entity.artists.map((a: any) => typeof a === "string" ? a : (a.name || "")).join(", ") : entity.artists) : (entity.subtitle || "");
 
                 return NextResponse.json({
                   platform: "spotify",
@@ -528,9 +528,37 @@ export async function POST(req: NextRequest) {
             }
           }
         }
+
+        // Spotify oEmbed Fallback
+        const oEmbedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(trimmedUrl)}`;
+        const oEmbedRes = await fetch(oEmbedUrl, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } });
+        if (oEmbedRes.ok) {
+          const oEmbedData = await oEmbedRes.json();
+          if (oEmbedData.title) {
+            return NextResponse.json({
+              platform: "spotify",
+              isPlaylist: false,
+              title: oEmbedData.title,
+              artist: oEmbedData.author_name || "Spotify",
+              duration: 180,
+              thumbnail: oEmbedData.thumbnail_url || null,
+              url: trimmedUrl,
+              originalUrl: trimmedUrl,
+              mediaType: "audio",
+              hasVideo: false,
+              hasAudio: true,
+              hasImage: false,
+              availableFormats: ["mp3", "flac", "wav", "m4a", "ogg"],
+            });
+          }
+        }
       } catch (spotErr) {
         console.warn("Spotify embed parsing error:", spotErr);
       }
+
+      return NextResponse.json({
+        error: "Impossible de récupérer les informations de ce lien Spotify. Vérifiez que le lien est public."
+      }, { status: 400 });
     }
 
     // --- VIMEO ---

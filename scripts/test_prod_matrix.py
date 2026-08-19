@@ -27,9 +27,9 @@ TEST_CASES = [
     },
     {
         "platform": "Spotify",
-        "type": "Single Track MP3",
+        "type": "Single Track MP3 (intl-fr)",
         "format": "mp3",
-        "url": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+        "url": "https://open.spotify.com/intl-fr/track/6CfromGdojo0R0vlgA7iU8",
     },
     {
         "platform": "Spotify",

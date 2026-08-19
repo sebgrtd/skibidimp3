@@ -278,13 +278,31 @@ export async function POST(req: NextRequest) {
     let downloadTargetUrl = trimmedUrl;
 
     if (trimmedUrl.includes("spotify.com") || trimmedUrl.includes("open.spotify.com") || trimmedUrl.includes("results?search_query=")) {
-      const searchTerms = [metadata.artist, metadata.title].filter(Boolean).join(" ");
+      let searchTerms = [metadata.artist, metadata.title].filter(Boolean).join(" ");
+      
+      // If metadata is not populated, fetch title and artist via Spotify oEmbed
+      if (!searchTerms.trim() && trimmedUrl.includes("spotify.com")) {
+        try {
+          const spRes = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(trimmedUrl)}`, {
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+          });
+          if (spRes.ok) {
+            const spData = await spRes.json();
+            if (spData.title) {
+              searchTerms = spData.author_name ? `${spData.author_name} ${spData.title}` : spData.title;
+            }
+          }
+        } catch {}
+      }
+
       if (searchTerms.trim()) {
         downloadTargetUrl = `scsearch5:${searchTerms}`;
       } else {
         const queryMatch = trimmedUrl.match(/search_query=([^&]+)/);
         if (queryMatch) {
           downloadTargetUrl = `scsearch5:${decodeURIComponent(queryMatch[1].replace(/\+/g, " "))}`;
+        } else {
+          throw new Error("Impossible de trouver les informations audio de ce titre Spotify.");
         }
       }
     }

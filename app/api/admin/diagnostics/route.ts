@@ -30,8 +30,8 @@ const TEST_LINKS: DiagnosticTestItem[] = [
   },
   {
     platform: "Spotify",
-    name: "Spotify - Single Track MP3",
-    url: "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+    name: "Spotify - Single Track MP3 (intl-fr)",
+    url: "https://open.spotify.com/intl-fr/track/6CfromGdojo0R0vlgA7iU8",
     format: "mp3",
   },
   {
