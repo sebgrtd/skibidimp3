@@ -76,6 +76,38 @@ export async function POST(req: NextRequest) {
 
       try {
         let downloadedRaw = "";
+
+        // If direct image download (e.g. from Pinterest, Instagram, Twitter carousel)
+        if ((format === "png" || format === "jpg" || format === "jpeg" || track.mediaType === "image") && targetUrl.startsWith("http")) {
+          const imgRes = await fetch(targetUrl);
+          if (imgRes.ok) {
+            const buf = Buffer.from(await imgRes.arrayBuffer());
+            const ext = format === "png" ? "png" : "jpg";
+            const imgOut = path.join(os.tmpdir(), `out_${trackId}.${ext}`);
+            fs.writeFileSync(imgOut, buf);
+            tmpFiles.push(imgOut);
+
+            const cleanTitle = (track.title || `Image_${i + 1}`).replace(/[^a-zA-Z0-9_\-\. ]/g, "").trim();
+            archive.file(imgOut, { name: `${cleanTitle}.${ext}` });
+            continue;
+          }
+        }
+
+        // If direct video download in MP4
+        if (format === "mp4" && targetUrl.startsWith("http") && (targetUrl.includes(".mp4") || targetUrl.includes("twimg.com") || targetUrl.includes("v.pinimg.com"))) {
+          const vidRes = await fetch(targetUrl);
+          if (vidRes.ok) {
+            const buf = Buffer.from(await vidRes.arrayBuffer());
+            const vidOut = path.join(os.tmpdir(), `out_${trackId}.mp4`);
+            fs.writeFileSync(vidOut, buf);
+            tmpFiles.push(vidOut);
+
+            const cleanTitle = (track.title || `Video_${i + 1}`).replace(/[^a-zA-Z0-9_\-\. ]/g, "").trim();
+            archive.file(vidOut, { name: `${cleanTitle}.mp4` });
+            continue;
+          }
+        }
+
         try {
           downloadedRaw = await downloadTrackWithUrl(targetUrl);
         } catch {
@@ -90,6 +122,7 @@ export async function POST(req: NextRequest) {
         const ffmpegArgs: string[] = ["-y", "-i", downloadedRaw];
         if (format === "mp3") ffmpegArgs.push("-c:a", "libmp3lame", "-b:a", bitrate);
         else if (format === "flac") ffmpegArgs.push("-c:a", "flac");
+        else if (format === "mp4") ffmpegArgs.push("-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac");
         else ffmpegArgs.push("-c:a", "libmp3lame", "-b:a", "320k");
 
         if (track.title) ffmpegArgs.push("-metadata", `title=${track.title}`);

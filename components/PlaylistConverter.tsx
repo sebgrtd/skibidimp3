@@ -26,7 +26,7 @@ export interface PlaylistTrack {
 }
 
 export interface PlaylistInfo {
-  platform: "youtube" | "spotify" | "soundcloud" | "generic";
+  platform: "youtube" | "spotify" | "soundcloud" | "instagram" | "twitter" | "tiktok" | "pinterest" | "vimeo" | "generic";
   isPlaylist: boolean;
   title: string;
   artist?: string;
@@ -300,7 +300,9 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
           <div className="flex-1 space-y-2 text-center sm:text-left min-w-0">
             <div className="flex items-center justify-center sm:justify-start gap-2">
               <span className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold text-indigo-300">
-                Album / Playlist ({tracks.length} pistes)
+                {(playlist.platform === "instagram" || playlist.platform === "twitter" || (playlist as any).platform === "pinterest")
+                  ? `Carrousel Multi-Médias (${tracks.length} éléments)`
+                  : `Album / Playlist (${tracks.length} pistes)`}
               </span>
             </div>
 
@@ -348,14 +350,26 @@ export default function PlaylistConverter({ playlist, onReset, onAddToHistory }:
               onChange={(e) => {
                 const [f, b] = e.target.value.split("_");
                 setFormat(f);
-                setBitrate(b);
+                setBitrate(b || "320k");
               }}
               className="rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-100 focus:border-indigo-500 focus:outline-none"
             >
-              <option value="mp3_320k">MP3 320k (HD)</option>
-              <option value="mp3_256k">MP3 256k</option>
-              <option value="flac_320k">FLAC (Lossless)</option>
-              <option value="wav_320k">WAV</option>
+              {(playlist.platform === "instagram" || playlist.platform === "twitter" || (playlist as any).platform === "pinterest") ? (
+                <>
+                  <option value="png_original">Images PNG (Original HD)</option>
+                  <option value="jpg_original">Images JPG</option>
+                  <option value="mp4_video">Vidéos MP4 (HD)</option>
+                  <option value="mp3_320k">Audio MP3 (320k)</option>
+                  <option value="gif_anim">GIFs Animés</option>
+                </>
+              ) : (
+                <>
+                  <option value="mp3_320k">MP3 320k (HD)</option>
+                  <option value="mp3_256k">MP3 256k</option>
+                  <option value="flac_320k">FLAC (Lossless)</option>
+                  <option value="wav_320k">WAV</option>
+                </>
+              )}
             </select>
 
             <button

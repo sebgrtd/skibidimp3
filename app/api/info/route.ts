@@ -155,7 +155,7 @@ async function fetchPinterestMedia(trimmedUrl: string): Promise<{ title: string;
   try {
     const res = await fetch(trimmedUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
       },
       redirect: "follow",
@@ -166,8 +166,11 @@ async function fetchPinterestMedia(trimmedUrl: string): Promise<{ title: string;
 
     const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["'](.*?)["']/i) ||
       html.match(/<title>(.*?)<\/title>/i);
-    const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["'](.*?)["']/i);
+    const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["'](.*?)["']/i) ||
+      html.match(/href=["'](https:\/\/i\.pinimg\.com\/[^\s"']+)["']/i);
     const videoMatch = html.match(/<meta\s+property=["']og:video(?::secure_url)?["']\s+content=["'](.*?)["']/i);
+    const vPinMatch = html.match(/https:\/\/v\.pinimg\.com\/videos\/[^\s"'\\]+/);
+    const mp4Match = html.match(/https:\/\/[^\s"'\\]*pinimg\.com[^\s"'\\]*\.mp4/);
 
     let rawImg = imageMatch ? imageMatch[1] : null;
     if (rawImg) {
@@ -175,21 +178,41 @@ async function fetchPinterestMedia(trimmedUrl: string): Promise<{ title: string;
       rawImg = rawImg.replace(/\/(?:236x|474x|736x|564x)\//, "/originals/");
     }
 
+    const videoUrl = videoMatch ? videoMatch[1] : (vPinMatch ? vPinMatch[0] : (mp4Match ? mp4Match[0] : undefined));
+
     return {
       title: titleMatch ? titleMatch[1].replace(/ - Pinterest$/, "").replace(/&amp;/g, "&") : "Pinterest Pin",
       artist: "Pinterest",
       thumbnail: rawImg,
       imageUrl: rawImg || undefined,
-      videoUrl: videoMatch ? videoMatch[1] : undefined,
-      isVideo: !!videoMatch,
+      videoUrl,
+      isVideo: !!videoUrl,
     };
   } catch {
     return null;
   }
 }
 
-// Fallback for Twitter / X Media via FXTwitter API
-async function fetchTwitterMedia(trimmedUrl: string): Promise<{ title: string; artist: string; thumbnail: string | null; mediaType: "video" | "image" | "gif" | "text"; mediaUrl?: string; duration?: number } | null> {
+// Fallback for Twitter / X Media via FXTwitter API with Carousel Multi-Item Support
+export interface TwitterMediaItem {
+  index: number;
+  id: string;
+  title: string;
+  artist: string;
+  url: string;
+  thumbnail: string | null;
+  mediaType: "video" | "image" | "gif";
+}
+
+async function fetchTwitterMedia(trimmedUrl: string): Promise<{
+  title: string;
+  artist: string;
+  thumbnail: string | null;
+  mediaType: "video" | "image" | "gif" | "text";
+  mediaUrl?: string;
+  duration?: number;
+  entries?: TwitterMediaItem[];
+} | null> {
   try {
     const fxUrl = trimmedUrl.replace(/twitter\.com|x\.com/, "api.fxtwitter.com");
     const res = await fetch(fxUrl, {
@@ -206,6 +229,35 @@ async function fetchTwitterMedia(trimmedUrl: string): Promise<{ title: string; a
     let mediaUrl: string | undefined = undefined;
     let thumb: string | null = null;
     let duration = 0;
+    const entries: TwitterMediaItem[] = [];
+
+    const authorName = tweet.author ? `@${tweet.author.screen_name} (${tweet.author.name})` : "X (Twitter)";
+
+    if (tweet.media?.all && Array.isArray(tweet.media.all) && tweet.media.all.length > 1) {
+      tweet.media.all.forEach((item: any, idx: number) => {
+        entries.push({
+          index: idx + 1,
+          id: `tw_${idx + 1}`,
+          title: `Élément ${idx + 1} (${item.type === "video" ? "Vidéo" : (item.type === "gif" ? "GIF" : "Image")})`,
+          artist: authorName,
+          url: item.url,
+          thumbnail: item.thumbnail_url || item.url,
+          mediaType: item.type === "video" ? "video" : (item.type === "gif" ? "gif" : "image")
+        });
+      });
+    } else if (tweet.media?.photos && tweet.media.photos.length > 1) {
+      tweet.media.photos.forEach((photo: any, idx: number) => {
+        entries.push({
+          index: idx + 1,
+          id: `tw_photo_${idx + 1}`,
+          title: `Image ${idx + 1}`,
+          artist: authorName,
+          url: photo.url,
+          thumbnail: photo.url,
+          mediaType: "image"
+        });
+      });
+    }
 
     if (tweet.media?.videos?.length > 0) {
       const vid = tweet.media.videos[0];
@@ -221,11 +273,12 @@ async function fetchTwitterMedia(trimmedUrl: string): Promise<{ title: string; a
 
     return {
       title: tweet.text ? (tweet.text.length > 80 ? tweet.text.substring(0, 80) + "..." : tweet.text) : "Post X / Twitter",
-      artist: tweet.author ? `@${tweet.author.screen_name} (${tweet.author.name})` : "X (Twitter)",
+      artist: authorName,
       thumbnail: thumb || (tweet.author ? tweet.author.avatar_url : null),
       mediaType,
       mediaUrl,
       duration,
+      entries: entries.length > 1 ? entries : undefined,
     };
   } catch {
     return null;
@@ -292,6 +345,21 @@ export async function POST(req: NextRequest) {
     if (platform === "twitter") {
       const twData = await fetchTwitterMedia(trimmedUrl);
       if (twData && twData.mediaType !== "text") {
+        if (twData.entries && twData.entries.length > 1) {
+          return NextResponse.json({
+            platform: "twitter",
+            isPlaylist: true,
+            title: twData.title,
+            artist: twData.artist,
+            thumbnail: twData.thumbnail,
+            totalTracks: twData.entries.length,
+            entries: twData.entries,
+            url: trimmedUrl,
+            originalUrl: trimmedUrl,
+            availableFormats: ["png", "jpg", "mp4", "mp3", "gif"],
+          });
+        }
+
         const isVid = twData.mediaType === "video";
         const isGif = twData.mediaType === "gif";
         const isImg = twData.mediaType === "image";
@@ -506,20 +574,21 @@ export async function POST(req: NextRequest) {
     if (info._type === "playlist" || (info.entries && Array.isArray(info.entries))) {
       const entries = (info.entries || []).map((entry: any, index: number) => ({
         index: index + 1,
-        id: entry.id,
-        title: entry.title || `Piste ${index + 1}`,
-        artist: entry.uploader || entry.artist || info.title || "Artiste Inconnu",
+        id: entry.id || `entry_${index + 1}`,
+        title: entry.title || (platform === "instagram" ? `Élément ${index + 1}` : `Piste ${index + 1}`),
+        artist: entry.uploader || entry.artist || info.title || "Instagram",
         duration: entry.duration || 0,
-        url: entry.webpage_url || entry.url || `https://www.youtube.com/watch?v=${entry.id}`,
-        thumbnail: entry.thumbnail || null,
+        url: entry.url || entry.webpage_url || trimmedUrl,
+        thumbnail: entry.thumbnail || entry.thumbnails?.[0]?.url || null,
+        mediaType: (entry.ext === "mp4" || entry.vcodec) ? "video" : "image"
       }));
 
       return NextResponse.json({
         platform,
         isPlaylist: true,
-        title: info.title || "Playlist",
-        artist: info.uploader || "Auteur Inconnu",
-        thumbnail: info.thumbnails?.[0]?.url || null,
+        title: info.title || (platform === "instagram" ? "Carrousel Instagram" : "Playlist"),
+        artist: info.uploader || "Auteur",
+        thumbnail: info.thumbnails?.[0]?.url || entries[0]?.thumbnail || null,
         totalTracks: entries.length,
         entries,
         url: trimmedUrl,
@@ -527,8 +596,10 @@ export async function POST(req: NextRequest) {
         mediaType: "mixed",
         hasVideo: true,
         hasAudio: true,
-        hasImage: false,
-        availableFormats: ["mp4", "mp3", "flac", "wav", "m4a"],
+        hasImage: true,
+        availableFormats: (platform === "instagram" || platform === "twitter")
+          ? ["mp4", "png", "jpg", "mp3"]
+          : ["mp4", "mp3", "flac", "wav", "m4a"],
       });
     }
 

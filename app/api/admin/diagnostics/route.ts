@@ -18,19 +18,13 @@ export interface DiagnosticTestItem {
 const TEST_LINKS: DiagnosticTestItem[] = [
   {
     platform: "YouTube",
-    name: "YouTube - Vidéo MP4",
-    url: "https://www.youtube.com/watch?v=M2Wfy9Wj8-M",
-    format: "mp4",
-  },
-  {
-    platform: "YouTube",
     name: "YouTube - Audio MP3 (320k)",
     url: "https://www.youtube.com/watch?v=M2Wfy9Wj8-M",
     format: "mp3",
   },
   {
     platform: "Spotify",
-    name: "Spotify - Audio MP3 (Extraction & Fallback)",
+    name: "Spotify - Single Track MP3",
     url: "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
     format: "mp3",
   },
@@ -47,16 +41,28 @@ const TEST_LINKS: DiagnosticTestItem[] = [
     format: "mp4",
   },
   {
-    platform: "Twitter / X",
-    name: "Twitter/X - Vidéo MP4",
-    url: "https://twitter.com/Twitter/status/1780000000000000000",
-    format: "mp4",
-  },
-  {
     platform: "Pinterest",
     name: "Pinterest - Image PNG HD",
     url: "https://www.pinterest.com/pin/123456789/",
     format: "png",
+  },
+  {
+    platform: "Twitter / X",
+    name: "Twitter/X - Image PNG HD",
+    url: "https://twitter.com/Twitter/status/1780000000000000000",
+    format: "png",
+  },
+  {
+    platform: "TikTok",
+    name: "TikTok - Vidéo MP4",
+    url: "https://www.tiktok.com/@tiktok/video/7106594312292453678",
+    format: "mp4",
+  },
+  {
+    platform: "YouTube",
+    name: "YouTube - Vidéo MP4",
+    url: "https://www.youtube.com/watch?v=M2Wfy9Wj8-M",
+    format: "mp4",
   },
 ];
 

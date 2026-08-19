@@ -15,19 +15,13 @@ ctx.verify_mode = ssl.CERT_NONE
 TEST_CASES = [
     {
         "platform": "YouTube",
-        "type": "Video MP4",
-        "format": "mp4",
-        "url": "https://www.youtube.com/watch?v=M2Wfy9Wj8-M",
-    },
-    {
-        "platform": "YouTube",
-        "type": "Audio MP3",
+        "type": "Audio MP3 (320k)",
         "format": "mp3",
         "url": "https://www.youtube.com/watch?v=M2Wfy9Wj8-M",
     },
     {
         "platform": "Spotify",
-        "type": "Audio MP3 Track",
+        "type": "Single Track MP3",
         "format": "mp3",
         "url": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
     },
@@ -39,13 +33,13 @@ TEST_CASES = [
     },
     {
         "platform": "SoundCloud",
-        "type": "Audio MP3",
+        "type": "Audio MP3 Direct",
         "format": "mp3",
         "url": "https://soundcloud.com/postmalone/circles",
     },
     {
         "platform": "Vimeo",
-        "type": "Video MP4",
+        "type": "Video MP4 HD",
         "format": "mp4",
         "url": "https://vimeo.com/22439234",
     },
@@ -54,7 +48,25 @@ TEST_CASES = [
         "type": "Image PNG HD",
         "format": "png",
         "url": "https://www.pinterest.com/pin/123456789/",
-    }
+    },
+    {
+        "platform": "Twitter / X",
+        "type": "Post / Image PNG",
+        "format": "png",
+        "url": "https://twitter.com/Twitter/status/1780000000000000000",
+    },
+    {
+        "platform": "TikTok",
+        "type": "Video MP4",
+        "format": "mp4",
+        "url": "https://www.tiktok.com/@tiktok/video/7106594312292453678",
+    },
+    {
+        "platform": "YouTube",
+        "type": "Video MP4",
+        "format": "mp4",
+        "url": "https://www.youtube.com/watch?v=M2Wfy9Wj8-M",
+    },
 ]
 
 print("=" * 80)
