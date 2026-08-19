@@ -214,72 +214,130 @@ async function fetchTwitterMedia(trimmedUrl: string): Promise<{
   entries?: TwitterMediaItem[];
 } | null> {
   try {
-    const fxUrl = trimmedUrl.replace(/twitter\.com|x\.com/, "api.fxtwitter.com");
-    const res = await fetch(fxUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; bot/1.0)" }
-    });
-
-    if (!res.ok) return null;
-    const json = await res.json();
-    const tweet = json.tweet;
-
-    if (!tweet) return null;
-
-    let mediaType: "video" | "image" | "gif" | "text" = "text";
-    let mediaUrl: string | undefined = undefined;
-    let thumb: string | null = null;
-    let duration = 0;
-    const entries: TwitterMediaItem[] = [];
-
-    const authorName = tweet.author ? `@${tweet.author.screen_name} (${tweet.author.name})` : "X (Twitter)";
-
-    if (tweet.media?.all && Array.isArray(tweet.media.all) && tweet.media.all.length > 1) {
-      tweet.media.all.forEach((item: any, idx: number) => {
-        entries.push({
-          index: idx + 1,
-          id: `tw_${idx + 1}`,
-          title: `Élément ${idx + 1} (${item.type === "video" ? "Vidéo" : (item.type === "gif" ? "GIF" : "Image")})`,
-          artist: authorName,
-          url: item.url,
-          thumbnail: item.thumbnail_url || item.url,
-          mediaType: item.type === "video" ? "video" : (item.type === "gif" ? "gif" : "image")
-        });
+    // 1. Try FXTwitter API
+    try {
+      const fxUrl = trimmedUrl.replace(/twitter\.com|x\.com/, "api.fxtwitter.com");
+      const res = await fetch(fxUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; bot/1.0)" }
       });
-    } else if (tweet.media?.photos && tweet.media.photos.length > 1) {
-      tweet.media.photos.forEach((photo: any, idx: number) => {
-        entries.push({
-          index: idx + 1,
-          id: `tw_photo_${idx + 1}`,
-          title: `Image ${idx + 1}`,
-          artist: authorName,
-          url: photo.url,
-          thumbnail: photo.url,
-          mediaType: "image"
-        });
+
+      if (res.ok) {
+        const json = await res.json();
+        const tweet = json.tweet;
+
+        if (tweet) {
+          let mediaType: "video" | "image" | "gif" | "text" = "text";
+          let mediaUrl: string | undefined = undefined;
+          let thumb: string | null = null;
+          let duration = 0;
+          const entries: TwitterMediaItem[] = [];
+
+          const authorName = tweet.author ? `@${tweet.author.screen_name} (${tweet.author.name})` : "X (Twitter)";
+
+          if (tweet.media?.all && Array.isArray(tweet.media.all) && tweet.media.all.length > 1) {
+            tweet.media.all.forEach((item: any, idx: number) => {
+              entries.push({
+                index: idx + 1,
+                id: `tw_${idx + 1}`,
+                title: `Élément ${idx + 1} (${item.type === "video" ? "Vidéo" : (item.type === "gif" ? "GIF" : "Image")})`,
+                artist: authorName,
+                url: item.url,
+                thumbnail: item.thumbnail_url || item.url,
+                mediaType: item.type === "video" ? "video" : (item.type === "gif" ? "gif" : "image")
+              });
+            });
+          } else if (tweet.media?.photos && tweet.media.photos.length > 1) {
+            tweet.media.photos.forEach((photo: any, idx: number) => {
+              entries.push({
+                index: idx + 1,
+                id: `tw_photo_${idx + 1}`,
+                title: `Image ${idx + 1}`,
+                artist: authorName,
+                url: photo.url,
+                thumbnail: photo.url,
+                mediaType: "image"
+              });
+            });
+          }
+
+          if (tweet.media?.videos?.length > 0) {
+            const vid = tweet.media.videos[0];
+            mediaType = vid.type === "gif" ? "gif" : "video";
+            mediaUrl = vid.url;
+            thumb = vid.thumbnail_url || null;
+            duration = vid.duration ? Math.round(vid.duration / 1000) : 0;
+          } else if (tweet.media?.photos?.length > 0) {
+            mediaType = "image";
+            mediaUrl = tweet.media.photos[0].url;
+            thumb = tweet.media.photos[0].url;
+          }
+
+          return {
+            title: tweet.text ? (tweet.text.length > 80 ? tweet.text.substring(0, 80) + "..." : tweet.text) : "Post X / Twitter",
+            artist: authorName,
+            thumbnail: thumb || (tweet.author ? tweet.author.avatar_url : null),
+            mediaType,
+            mediaUrl,
+            duration,
+            entries: entries.length > 1 ? entries : undefined,
+          };
+        }
+      }
+    } catch {}
+
+    // 2. Fallback to VXTwitter API
+    try {
+      const vxUrl = trimmedUrl.replace(/twitter\.com|x\.com/, "api.vxtwitter.com");
+      const vxRes = await fetch(vxUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
       });
-    }
+      if (vxRes.ok) {
+        const vxJson = await vxRes.json();
+        if (vxJson && (vxJson.hasMedia || (vxJson.mediaURLs && vxJson.mediaURLs.length > 0))) {
+          const authorName = vxJson.user_screen_name ? `@${vxJson.user_screen_name} (${vxJson.user_name || ""})` : "X (Twitter)";
+          const mediaUrls: string[] = vxJson.mediaURLs || [];
 
-    if (tweet.media?.videos?.length > 0) {
-      const vid = tweet.media.videos[0];
-      mediaType = vid.type === "gif" ? "gif" : "video";
-      mediaUrl = vid.url;
-      thumb = vid.thumbnail_url || null;
-      duration = vid.duration ? Math.round(vid.duration / 1000) : 0;
-    } else if (tweet.media?.photos?.length > 0) {
-      mediaType = "image";
-      mediaUrl = tweet.media.photos[0].url;
-      thumb = tweet.media.photos[0].url;
-    }
+          if (mediaUrls.length > 1) {
+            const entries: TwitterMediaItem[] = mediaUrls.map((url: string, idx: number) => {
+              const isV = url.includes(".mp4") || url.includes("video.twimg.com");
+              return {
+                index: idx + 1,
+                id: `tw_vx_${idx + 1}`,
+                title: `Élément ${idx + 1} (${isV ? "Vidéo" : "Image"})`,
+                artist: authorName,
+                url,
+                thumbnail: isV ? (vxJson.thumbnail || url) : url,
+                mediaType: isV ? "video" : "image",
+              };
+            });
 
-    return {
-      title: tweet.text ? (tweet.text.length > 80 ? tweet.text.substring(0, 80) + "..." : tweet.text) : "Post X / Twitter",
-      artist: authorName,
-      thumbnail: thumb || (tweet.author ? tweet.author.avatar_url : null),
-      mediaType,
-      mediaUrl,
-      duration,
-      entries: entries.length > 1 ? entries : undefined,
-    };
+            return {
+              title: vxJson.text ? (vxJson.text.length > 80 ? vxJson.text.substring(0, 80) + "..." : vxJson.text) : "Post X / Twitter",
+              artist: authorName,
+              thumbnail: entries[0].thumbnail,
+              mediaType: "image",
+              duration: 0,
+              entries,
+            };
+          }
+
+          if (mediaUrls.length === 1) {
+            const first = mediaUrls[0];
+            const isV = first.includes(".mp4") || first.includes("video.twimg.com");
+            return {
+              title: vxJson.text ? (vxJson.text.length > 80 ? vxJson.text.substring(0, 80) + "..." : vxJson.text) : "Post X / Twitter",
+              artist: authorName,
+              thumbnail: first,
+              mediaType: isV ? "video" : "image",
+              mediaUrl: first,
+              duration: 0,
+            };
+          }
+        }
+      }
+    } catch {}
+
+    return null;
   } catch {
     return null;
   }
@@ -549,6 +607,19 @@ export async function POST(req: NextRequest) {
             availableFormats: ["mp3", "flac", "wav", "m4a", "ogg"],
           });
         }
+      }
+
+      // Error handling for Instagram & TikTok bot-walls
+      if (platform === "instagram") {
+        return NextResponse.json({
+          error: "Instagram bloque l'accès public non authentifié sur ce serveur d'hébergement. Veuillez configurer vos cookies dans le panneau d'Administration (/admin > Cookies Anti-Bot) pour débloquer Instagram (Reels, Posts et Carrousels)."
+        }, { status: 403 });
+      }
+
+      if (platform === "tiktok") {
+        return NextResponse.json({
+          error: "TikTok a bloqué la requête sur ce lien. Veuillez vérifier l'URL ou configurer vos cookies dans le panneau d'Administration (/admin > Cookies Anti-Bot)."
+        }, { status: 403 });
       }
 
       throw ytdlpErr;

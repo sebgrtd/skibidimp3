@@ -23,9 +23,21 @@ const TEST_LINKS: DiagnosticTestItem[] = [
     format: "mp3",
   },
   {
+    platform: "YouTube",
+    name: "YouTube - Vidéo MP4 HD",
+    url: "https://www.youtube.com/watch?v=M2Wfy9Wj8-M",
+    format: "mp4",
+  },
+  {
     platform: "Spotify",
     name: "Spotify - Single Track MP3",
     url: "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+    format: "mp3",
+  },
+  {
+    platform: "Spotify",
+    name: "Spotify - Album Multi-Tracks ZIP",
+    url: "https://open.spotify.com/album/3mkVo55KYmJAxy21rPssZ4",
     format: "mp3",
   },
   {
@@ -41,6 +53,12 @@ const TEST_LINKS: DiagnosticTestItem[] = [
     format: "mp4",
   },
   {
+    platform: "Vimeo",
+    name: "Vimeo - Audio MP3 Direct",
+    url: "https://vimeo.com/22439234",
+    format: "mp3",
+  },
+  {
     platform: "Pinterest",
     name: "Pinterest - Image PNG HD",
     url: "https://www.pinterest.com/pin/123456789/",
@@ -53,15 +71,27 @@ const TEST_LINKS: DiagnosticTestItem[] = [
     format: "png",
   },
   {
-    platform: "TikTok",
-    name: "TikTok - Vidéo MP4",
-    url: "https://www.tiktok.com/@scout2015/video/6718335390845095173",
+    platform: "Twitter / X",
+    name: "Twitter/X - Carrousel Multi-Médias",
+    url: "https://twitter.com/TheEllenShow/status/440322224407314432",
+    format: "png",
+  },
+  {
+    platform: "Instagram",
+    name: "Instagram - Reel Vidéo MP4",
+    url: "https://www.instagram.com/reel/C8qL_50uP9V/",
     format: "mp4",
   },
   {
-    platform: "YouTube",
-    name: "YouTube - Vidéo MP4",
-    url: "https://www.youtube.com/watch?v=M2Wfy9Wj8-M",
+    platform: "Instagram",
+    name: "Instagram - Carrousel Photos/Vidéos",
+    url: "https://www.instagram.com/p/C9v8-Y-tS-r/",
+    format: "png",
+  },
+  {
+    platform: "TikTok",
+    name: "TikTok - Vidéo MP4 (Sans filigrane)",
+    url: "https://www.tiktok.com/@scout2015/video/6718335390845095173",
     format: "mp4",
   },
 ];

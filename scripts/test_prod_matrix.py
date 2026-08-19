@@ -20,6 +20,12 @@ TEST_CASES = [
         "url": "https://www.youtube.com/watch?v=M2Wfy9Wj8-M",
     },
     {
+        "platform": "YouTube",
+        "type": "Vidéo MP4 HD",
+        "format": "mp4",
+        "url": "https://www.youtube.com/watch?v=M2Wfy9Wj8-M",
+    },
+    {
         "platform": "Spotify",
         "type": "Single Track MP3",
         "format": "mp3",
@@ -27,7 +33,7 @@ TEST_CASES = [
     },
     {
         "platform": "Spotify",
-        "type": "Album Multi-Tracks",
+        "type": "Album Multi-Tracks ZIP",
         "format": "mp3",
         "url": "https://open.spotify.com/album/3mkVo55KYmJAxy21rPssZ4",
     },
@@ -39,8 +45,14 @@ TEST_CASES = [
     },
     {
         "platform": "Vimeo",
-        "type": "Video MP4 HD",
+        "type": "Vidéo MP4 HD",
         "format": "mp4",
+        "url": "https://vimeo.com/22439234",
+    },
+    {
+        "platform": "Vimeo",
+        "type": "Audio MP3 Direct",
+        "format": "mp3",
         "url": "https://vimeo.com/22439234",
     },
     {
@@ -56,16 +68,28 @@ TEST_CASES = [
         "url": "https://twitter.com/TheEllenShow/status/440322224407314432",
     },
     {
-        "platform": "TikTok",
-        "type": "Video MP4",
-        "format": "mp4",
-        "url": "https://www.tiktok.com/@scout2015/video/6718335390845095173",
+        "platform": "Twitter / X",
+        "type": "Carrousel / Multi-Médias",
+        "format": "png",
+        "url": "https://twitter.com/TheEllenShow/status/440322224407314432",
     },
     {
-        "platform": "YouTube",
-        "type": "Video MP4",
+        "platform": "Instagram",
+        "type": "Reel / Vidéo MP4",
         "format": "mp4",
-        "url": "https://www.youtube.com/watch?v=M2Wfy9Wj8-M",
+        "url": "https://www.instagram.com/reel/C8qL_50uP9V/",
+    },
+    {
+        "platform": "Instagram",
+        "type": "Carrousel Photos/Vidéos",
+        "format": "png",
+        "url": "https://www.instagram.com/p/C9v8-Y-tS-r/",
+    },
+    {
+        "platform": "TikTok",
+        "type": "Vidéo MP4",
+        "format": "mp4",
+        "url": "https://www.tiktok.com/@scout2015/video/6718335390845095173",
     },
 ]
 
