@@ -194,8 +194,8 @@ export async function POST(req: NextRequest) {
       finalTitle = finalTitle.substring(finalArtist.length + 3).trim();
     }
 
-    metadata = {
-      ...metadata,
+    const metadata = {
+      ...rawMeta,
       title: finalTitle || "Audio",
       artist: finalArtist || "",
       coverUrl: finalCoverUrl,
