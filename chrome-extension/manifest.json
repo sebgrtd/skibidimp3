@@ -30,7 +30,16 @@
       "matches": [
         "*://*.youtube.com/*",
         "*://*.youtu.be/*",
+        "*://*.spotify.com/*",
+        "*://*.soundcloud.com/*",
+        "*://*.tiktok.com/*",
+        "*://*.instagram.com/*",
+        "*://*.twitter.com/*",
+        "*://*.x.com/*",
+        "*://*.pinterest.com/*",
+        "*://*.pin.it/*",
         "*://*.vimeo.com/*",
+        "*://*.player.vimeo.com/*",
         "*://player.vimeo.com/*"
       ],
       "js": ["content/content.js"],

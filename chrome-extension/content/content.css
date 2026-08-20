@@ -247,3 +247,150 @@
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ========================================================= */
+/* UNIVERSAL DRAGGABLE FLOATING OVERLAY WIDGET               */
+/* ========================================================= */
+
+.skibidi-draggable-overlay {
+  position: fixed;
+  z-index: 2147483647;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(18, 18, 24, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 9999px;
+  padding: 4px 6px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65), 0 0 20px rgba(79, 70, 229, 0.35);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  user-select: none;
+  touch-action: none;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  animation: skibidi-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.skibidi-draggable-overlay.skibidi-dragging {
+  cursor: grabbing !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(99, 102, 241, 0.6);
+  border-color: rgba(129, 140, 248, 0.7);
+  transform: scale(1.03);
+  transition: none;
+}
+
+.skibidi-overlay-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px 0 4px;
+  cursor: grab;
+  color: #818cf8;
+  opacity: 0.75;
+  transition: opacity 0.15s ease;
+}
+
+.skibidi-overlay-handle:hover {
+  opacity: 1;
+}
+
+.skibidi-overlay-main-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #ffffff !important;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 14px;
+  height: 34px;
+  border-radius: 17px 0 0 17px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.4);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.skibidi-overlay-main-btn:hover {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.6);
+}
+
+.skibidi-overlay-main-btn:active {
+  transform: scale(0.97);
+}
+
+.skibidi-overlay-dropdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #ffffff !important;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 0 17px 17px 0;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.skibidi-overlay-dropdown-toggle:hover {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+}
+
+.skibidi-overlay-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #71717a;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  margin-left: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.skibidi-overlay-close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.skibidi-overlay-main-btn.skibidi-loading {
+  background: #312e81 !important;
+  cursor: not-allowed;
+  opacity: 0.9;
+}
+
+.skibidi-overlay-main-btn.skibidi-success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.5);
+}
+
+.skibidi-overlay-main-btn.skibidi-error {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.5);
+}
+
+.skibidi-overlay-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  background: rgba(18, 18, 24, 0.97);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 14px;
+  padding: 6px;
+  width: 230px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.8), 0 0 24px rgba(79, 70, 229, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 2147483647;
+  animation: skibidi-fade-in 0.15s ease-out;
+}

@@ -1,12 +1,52 @@
-// SkibidiMP3 - YouTube Content Script (Precise Title Extraction & Proactive Detection)
+// SkibidiMP3 - Universal Content Script (Draggable Floating Overlay + Direct Media Detection)
 
 (() => {
   let isConverting = false;
   let lastNotifiedUrl = "";
 
+  // -------------------------------------------------------------
+  // 1. Platform & Media Detection
+  // -------------------------------------------------------------
+  function detectMediaPage() {
+    const url = window.location.href;
+    const hostname = window.location.hostname;
+    const pathname = window.location.pathname;
+
+    if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) {
+      if (url.includes("watch?v=") || pathname.includes("/shorts/")) return "youtube";
+    }
+    if (hostname.includes("spotify.com")) {
+      if (pathname.includes("/track/") || pathname.includes("/album/") || pathname.includes("/playlist/") || pathname.includes("/episode/")) return "spotify";
+    }
+    if (hostname.includes("soundcloud.com")) {
+      if (pathname.length > 3 && !pathname.startsWith("/discover") && !pathname.startsWith("/stream") && !pathname.startsWith("/upload")) return "soundcloud";
+    }
+    if (hostname.includes("tiktok.com")) {
+      if (pathname.includes("/video/") || pathname.includes("/v/") || pathname.includes("/t/") || pathname.includes("/@")) return "tiktok";
+    }
+    if (hostname.includes("instagram.com")) {
+      if (pathname.includes("/reel/") || pathname.includes("/p/") || pathname.includes("/tv/") || pathname.includes("/stories/")) return "instagram";
+    }
+    if (hostname.includes("twitter.com") || hostname.includes("x.com")) {
+      if (pathname.includes("/status/")) return "twitter";
+    }
+    if (hostname.includes("pinterest.com") || hostname.includes("pin.it")) {
+      if (pathname.includes("/pin/") || hostname.includes("pin.it")) return "pinterest";
+    }
+    if (hostname.includes("vimeo.com")) {
+      const isId = pathname.match(/\d{6,}/);
+      if (isId || hostname.includes("player.vimeo.com")) return "vimeo";
+    }
+
+    return null;
+  }
+
+  // -------------------------------------------------------------
+  // 2. Direct Stream & Info Extractors
+  // -------------------------------------------------------------
   function extractDirectStreams() {
     return new Promise((resolve) => {
-      // 1. Try scanning script tags on the page
+      // 1. Try scanning script tags on YouTube
       for (const script of document.scripts) {
         if (script.textContent && script.textContent.includes("ytInitialPlayerResponse")) {
           const match = script.textContent.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
@@ -61,10 +101,10 @@
     });
   }
 
-  // Extract Vimeo player stream from DOM or window.playerConfig
-  function extractVimeoStream(targetQuality) {
+  // Extract Vimeo player stream from DOM or window.playerConfig (No partial range chunks!)
+  function extractVimeoStream(targetQuality = "1080p") {
     return new Promise((resolve) => {
-      // 1. Check window.playerConfig (Most complete & authoritative)
+      // 1. Check window.playerConfig (Authoritative progressive MP4s & HLS master)
       try {
         if (window.playerConfig && window.playerConfig.request && window.playerConfig.request.files) {
           const files = window.playerConfig.request.files;
@@ -83,7 +123,7 @@
         }
       } catch {}
 
-      // 2. Check performance resources for master playlists (Excluding range fragments)
+      // 2. Check performance resources for master manifests (Excluding range fragments)
       try {
         const entries = performance.getEntriesByType("resource");
         for (let i = entries.length - 1; i >= 0; i--) {
@@ -150,7 +190,6 @@
   function processStreamingData(data) {
     if (!data) return null;
 
-    // Extract cleanest title and artist from DOM / player
     let title = document.querySelector("h1.ytd-watch-metadata yt-formatted-string")?.textContent
       || document.querySelector("h1.title")?.textContent
       || data.videoDetails?.title
@@ -168,12 +207,10 @@
     const formats = data.streamingData?.formats || [];
     const adaptiveFormats = data.streamingData?.adaptiveFormats || [];
 
-    // Find best direct progressive MP4
     let directMp4 = formats.find(f => f.itag === 22 && f.url); // 720p
     if (!directMp4) directMp4 = formats.find(f => f.itag === 18 && f.url); // 360p
     if (!directMp4) directMp4 = formats.find(f => f.url && f.mimeType && f.mimeType.includes("video/mp4"));
 
-    // Find direct audio stream
     let directAudio = adaptiveFormats.find(f => f.itag === 140 && f.url); // 128k M4A
     if (!directAudio) directAudio = adaptiveFormats.find(f => f.itag === 251 && f.url); // 160k WebM Opus
     if (!directAudio) directAudio = adaptiveFormats.find(f => f.url && f.mimeType && f.mimeType.includes("audio/"));
@@ -189,65 +226,169 @@
     };
   }
 
-  function createActionContainer() {
-    const container = document.createElement("div");
-    container.id = "skibidi-action-container";
-    container.className = "skibidi-btn-group";
+  // -------------------------------------------------------------
+  // 3. Universal Draggable Floating Overlay
+  // -------------------------------------------------------------
+  function injectDraggableFloatingOverlay() {
+    if (document.getElementById("skibidi-draggable-overlay")) return;
 
-    // Main Quick MP3 button
-    const mainBtn = document.createElement("button");
-    mainBtn.id = "skibidi-quick-download-btn";
-    mainBtn.className = "skibidi-yt-btn";
-    mainBtn.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-      <span>MP3 Boosté</span>
+    const platform = detectMediaPage();
+    if (!platform) return;
+
+    const overlay = document.createElement("div");
+    overlay.id = "skibidi-draggable-overlay";
+    overlay.className = "skibidi-draggable-overlay";
+
+    // Restore saved position
+    const savedPos = localStorage.getItem("skibidi_overlay_pos");
+    if (savedPos) {
+      try {
+        const { left, top } = JSON.parse(savedPos);
+        const maxLeft = Math.max(10, window.innerWidth - 200);
+        const maxTop = Math.max(10, window.innerHeight - 60);
+        overlay.style.left = `${Math.min(Math.max(10, left), maxLeft)}px`;
+        overlay.style.top = `${Math.min(Math.max(10, top), maxTop)}px`;
+        overlay.style.right = "auto";
+        overlay.style.bottom = "auto";
+      } catch {}
+    } else {
+      overlay.style.right = "24px";
+      overlay.style.bottom = "24px";
+    }
+
+    overlay.innerHTML = `
+      <div class="skibidi-overlay-handle" title="Glisser pour déplacer le bouton">
+        <svg width="10" height="14" viewBox="0 0 10 16" fill="currentColor">
+          <circle cx="3" cy="3" r="1.5"></circle>
+          <circle cx="7" cy="3" r="1.5"></circle>
+          <circle cx="3" cy="8" r="1.5"></circle>
+          <circle cx="7" cy="8" r="1.5"></circle>
+          <circle cx="3" cy="13" r="1.5"></circle>
+          <circle cx="7" cy="13" r="1.5"></circle>
+        </svg>
+      </div>
+
+      <button id="skibidi-overlay-btn" class="skibidi-overlay-main-btn" title="Téléchargement MP3 320k instantané">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        <span>MP3 Boosté</span>
+      </button>
+
+      <button id="skibidi-overlay-toggle" class="skibidi-overlay-dropdown-toggle" title="Options">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </button>
+
+      <button id="skibidi-overlay-close" class="skibidi-overlay-close-btn" title="Masquer">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+
+      <div id="skibidi-overlay-menu" class="skibidi-overlay-menu hidden">
+        <div class="skibidi-menu-header">Options SkibidiMP3</div>
+        <button class="skibidi-menu-item" data-action="vps-mp3">
+          <div class="menu-icon">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          </div>
+          <div class="menu-text">
+            <strong>MP3 320k Boosté</strong>
+            <small>Conversion haute qualité + Tags ID3</small>
+          </div>
+        </button>
+        <button class="skibidi-menu-item" data-action="client-mp4">
+          <div class="menu-icon">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2"></rect></svg>
+          </div>
+          <div class="menu-text">
+            <strong>MP4 Vidéo HD</strong>
+            <small>Flux vidéo natif direct</small>
+          </div>
+        </button>
+        <button class="skibidi-menu-item" data-action="client-audio">
+          <div class="menu-icon">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+          </div>
+          <div class="menu-text">
+            <strong>Audio Direct (M4A/WAV)</strong>
+            <small>Extraction audio directe sans attente</small>
+          </div>
+        </button>
+      </div>
     `;
+
+    document.body.appendChild(overlay);
+
+    const mainBtn = overlay.querySelector("#skibidi-overlay-btn");
+    const dropdownToggle = overlay.querySelector("#skibidi-overlay-toggle");
+    const closeBtn = overlay.querySelector("#skibidi-overlay-close");
+    const menu = overlay.querySelector("#skibidi-overlay-menu");
+
+    // -------------------------------------------------------------
+    // Smooth Drag & Move Handler
+    // -------------------------------------------------------------
+    let isDragging = false;
+    let hasMoved = false;
+    let startX = 0, startY = 0;
+    let initialLeft = 0, initialTop = 0;
+
+    const onPointerDown = (e) => {
+      // Don't drag if clicking menu or close button
+      if (e.target.closest("#skibidi-overlay-menu") || e.target.closest("#skibidi-overlay-close")) return;
+
+      isDragging = true;
+      hasMoved = false;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      const rect = overlay.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      overlay.style.right = "auto";
+      overlay.style.bottom = "auto";
+      overlay.style.left = `${initialLeft}px`;
+      overlay.style.top = `${initialTop}px`;
+
+      document.addEventListener("pointermove", onPointerMove);
+      document.addEventListener("pointerup", onPointerUp);
+    };
+
+    const onPointerMove = (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+        hasMoved = true;
+        overlay.classList.add("skibidi-dragging");
+        menu.classList.add("hidden");
+      }
+
+      if (hasMoved) {
+        const newLeft = Math.min(Math.max(8, initialLeft + dx), window.innerWidth - overlay.offsetWidth - 8);
+        const newTop = Math.min(Math.max(8, initialTop + dy), window.innerHeight - overlay.offsetHeight - 8);
+        overlay.style.left = `${newLeft}px`;
+        overlay.style.top = `${newTop}px`;
+      }
+    };
+
+    const onPointerUp = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      overlay.classList.remove("skibidi-dragging");
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+
+      if (hasMoved) {
+        const rect = overlay.getBoundingClientRect();
+        localStorage.setItem("skibidi_overlay_pos", JSON.stringify({ left: Math.round(rect.left), top: Math.round(rect.top) }));
+      }
+    };
+
+    overlay.addEventListener("pointerdown", onPointerDown);
 
     // Dropdown toggle
-    const dropdownBtn = document.createElement("button");
-    dropdownBtn.className = "skibidi-yt-btn skibidi-dropdown-toggle";
-    dropdownBtn.title = "Options de téléchargement";
-    dropdownBtn.innerHTML = `
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-    `;
-
-    // Dropdown menu
-    const menu = document.createElement("div");
-    menu.className = "skibidi-dropdown-menu hidden";
-    menu.innerHTML = `
-      <div class="skibidi-menu-header">Options SkibidiMP3</div>
-      <button class="skibidi-menu-item" data-action="vps-mp3">
-        <div class="menu-icon">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-        </div>
-        <div class="menu-text">
-          <strong>MP3 320k Boosté</strong>
-          <small>Conversion serveur + Tags ID3</small>
-        </div>
-      </button>
-      <button class="skibidi-menu-item" data-action="client-mp4">
-        <div class="menu-icon">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2"></rect></svg>
-        </div>
-        <div class="menu-text">
-          <strong>MP4 Direct (Client)</strong>
-          <small>Téléchargement direct sans VPS</small>
-        </div>
-      </button>
-      <button class="skibidi-menu-item" data-action="client-audio">
-        <div class="menu-icon">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-        </div>
-        <div class="menu-text">
-          <strong>Audio Direct M4A</strong>
-          <small>Flux audio natif haute vitesse</small>
-        </div>
-      </button>
-    `;
-
-    dropdownBtn.addEventListener("click", (e) => {
+    dropdownToggle.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (hasMoved) return;
       menu.classList.toggle("hidden");
     });
 
@@ -257,179 +398,39 @@
       }
     });
 
+    // Close button
+    closeBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      overlay.remove();
+    });
+
+    // Main button action
     mainBtn.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      await triggerDownload("vps-mp3", mainBtn);
+      if (hasMoved) return;
+      await triggerUniversalDownload("vps-mp3", mainBtn);
     });
 
+    // Menu actions
     menu.querySelectorAll(".skibidi-menu-item").forEach((item) => {
       item.addEventListener("click", async (e) => {
         e.preventDefault();
         e.stopPropagation();
         menu.classList.add("hidden");
         const action = item.getAttribute("data-action");
-        await triggerDownload(action, mainBtn);
+        await triggerUniversalDownload(action, mainBtn);
       });
     });
-
-    container.appendChild(mainBtn);
-    container.appendChild(dropdownBtn);
-    container.appendChild(menu);
-
-    return container;
   }
 
-  function showDetectionToast() {
-    const currentUrl = window.location.href;
-    if (lastNotifiedUrl === currentUrl) return;
-    lastNotifiedUrl = currentUrl;
-
-    const existing = document.getElementById("skibidi-floating-toast");
-    if (existing) existing.remove();
-
-    const toast = document.createElement("div");
-    toast.id = "skibidi-floating-toast";
-    toast.className = "skibidi-floating-toast";
-    toast.innerHTML = `
-      <div class="skibidi-toast-badge">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-      </div>
-      <div class="skibidi-toast-content">
-        <span class="skibidi-toast-title">Média détecté</span>
-        <span class="skibidi-toast-desc">Disponible en MP3 ou MP4 direct</span>
-      </div>
-      <div class="skibidi-toast-actions">
-        <button id="skibidi-toast-dl-btn" class="skibidi-toast-btn">Télécharger</button>
-        <button id="skibidi-toast-close-btn" class="skibidi-toast-close" title="Fermer">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </div>
-    `;
-
-    toast.querySelector("#skibidi-toast-dl-btn").addEventListener("click", () => {
-      toast.remove();
-      const mainBtn = document.getElementById("skibidi-quick-download-btn");
-      if (mainBtn) triggerDownload("vps-mp3", mainBtn);
-    });
-
-    toast.querySelector("#skibidi-toast-close-btn").addEventListener("click", () => {
-      toast.remove();
-    });
-
-    document.body.appendChild(toast);
-
-    setTimeout(() => {
-      if (document.getElementById("skibidi-floating-toast") === toast) {
-        toast.remove();
-      }
-    }, 6000);
-  }
-
-  async function triggerDownload(mode, btnEl) {
-    if (isConverting) return;
-
-    const currentUrl = window.location.href;
-    if (!currentUrl.includes("watch?v=") && !currentUrl.includes("/shorts/")) {
-      alert("Veuillez vous positionner sur une vidéo YouTube.");
-      return;
-    }
-
-    isConverting = true;
-    btnEl.className = "skibidi-yt-btn skibidi-loading";
-    btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Préparation...</span>`;
-
-    try {
-      if (mode === "client-mp4" || mode === "client-audio") {
-        btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Flux direct...</span>`;
-        const streams = await extractDirectStreams();
-
-        if (mode === "client-mp4" && streams && streams.directMp4Url) {
-          const res = await chrome.runtime.sendMessage({
-            action: "DIRECT_CLIENT_DOWNLOAD",
-            streamUrl: streams.directMp4Url,
-            title: streams.title,
-            artist: streams.artist,
-            format: "mp4",
-            bitrate: streams.directMp4Quality || "720p",
-            thumbnail: streams.thumbnail,
-            originalUrl: currentUrl,
-          });
-
-          if (!res?.success) throw new Error(res?.error || "Échec du téléchargement direct");
-          showSuccess(btnEl);
-          return;
-        }
-
-        if (mode === "client-audio" && streams && streams.directAudioUrl) {
-          const res = await chrome.runtime.sendMessage({
-            action: "DIRECT_CLIENT_DOWNLOAD",
-            streamUrl: streams.directAudioUrl,
-            title: streams.title,
-            artist: streams.artist,
-            format: streams.directAudioExt || "m4a",
-            bitrate: "Direct",
-            thumbnail: streams.thumbnail,
-            originalUrl: currentUrl,
-          });
-
-          if (!res?.success) throw new Error(res?.error || "Échec du téléchargement audio");
-          showSuccess(btnEl);
-          return;
-        }
-      }
-
-      btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Conversion...</span>`;
-      const response = await chrome.runtime.sendMessage({
-        action: "QUICK_DOWNLOAD_FROM_PAGE",
-        url: currentUrl,
-        options: { format: mode === "client-mp4" ? "mp4" : "mp3" },
-      });
-
-      if (response && response.success) {
-        showSuccess(btnEl);
-      } else {
-        throw new Error(response?.error || "Erreur inconnue");
-      }
-    } catch (err) {
-      showError(btnEl, err.message);
-    } finally {
-      setTimeout(() => {
-        isConverting = false;
-        btnEl.className = "skibidi-yt-btn";
-        btnEl.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-          <span>MP3 Boosté</span>
-        `;
-      }, 3500);
-    }
-  }
-
-  function showSuccess(btnEl) {
-    btnEl.className = "skibidi-yt-btn skibidi-success";
-    btnEl.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-      <span>Téléchargé !</span>
-    `;
-  }
-
-  function showError(btnEl, message) {
-    btnEl.className = "skibidi-yt-btn skibidi-error";
-    btnEl.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
-      <span>Échec</span>
-    `;
-    console.error("SkibidiMP3 error:", message);
-  }
-
-  function injectButton() {
-    if (!window.location.href.includes("watch?v=") && !window.location.href.includes("/shorts/")) {
-      return;
-    }
-
-    if (document.getElementById("skibidi-action-container")) {
-      return;
-    }
+  // -------------------------------------------------------------
+  // 4. In-Page YouTube Button Injection (Below Player)
+  // -------------------------------------------------------------
+  function injectYouTubeInPageButton() {
+    if (!window.location.href.includes("watch?v=") && !window.location.href.includes("/shorts/")) return;
+    if (document.getElementById("skibidi-action-container")) return;
 
     const targets = [
       "#top-row #actions #top-level-buttons-computed",
@@ -449,26 +450,212 @@
     }
 
     if (targetEl) {
-      const container = createActionContainer();
+      const container = document.createElement("div");
+      container.id = "skibidi-action-container";
+      container.className = "skibidi-btn-group";
+
+      const mainBtn = document.createElement("button");
+      mainBtn.id = "skibidi-quick-download-btn";
+      mainBtn.className = "skibidi-yt-btn";
+      mainBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        <span>MP3 Boosté</span>
+      `;
+
+      const dropdownBtn = document.createElement("button");
+      dropdownBtn.className = "skibidi-yt-btn skibidi-dropdown-toggle";
+      dropdownBtn.title = "Options";
+      dropdownBtn.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      `;
+
+      const menu = document.createElement("div");
+      menu.className = "skibidi-dropdown-menu hidden";
+      menu.innerHTML = `
+        <div class="skibidi-menu-header">Options SkibidiMP3</div>
+        <button class="skibidi-menu-item" data-action="vps-mp3">
+          <div class="menu-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
+          <div class="menu-text"><strong>MP3 320k Boosté</strong><small>Transcodage serveur + Tags ID3</small></div>
+        </button>
+        <button class="skibidi-menu-item" data-action="client-mp4">
+          <div class="menu-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2"></rect></svg></div>
+          <div class="menu-text"><strong>MP4 Direct HD</strong><small>Téléchargement direct</small></div>
+        </button>
+      `;
+
+      dropdownBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        menu.classList.toggle("hidden");
+      });
+
+      document.addEventListener("click", () => menu.classList.add("hidden"));
+
+      mainBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerUniversalDownload("vps-mp3", mainBtn);
+      });
+
+      menu.querySelectorAll(".skibidi-menu-item").forEach((item) => {
+        item.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          menu.classList.add("hidden");
+          triggerUniversalDownload(item.getAttribute("data-action"), mainBtn);
+        });
+      });
+
+      container.appendChild(mainBtn);
+      container.appendChild(dropdownBtn);
+      container.appendChild(menu);
       targetEl.appendChild(container);
-      showDetectionToast();
     }
   }
 
-  window.addEventListener("yt-navigate-finish", () => {
-    setTimeout(injectButton, 600);
-    setTimeout(injectButton, 1800);
-  });
+  // -------------------------------------------------------------
+  // 5. Universal Download Trigger
+  // -------------------------------------------------------------
+  async function triggerUniversalDownload(mode, btnEl) {
+    if (isConverting) return;
+    const currentUrl = window.location.href;
+    const platform = detectMediaPage();
 
-  window.addEventListener("load", () => {
-    setTimeout(injectButton, 800);
-  });
-
-  setInterval(() => {
-    if (window.location.href.includes("watch?v=") || window.location.href.includes("/shorts/")) {
-      if (!document.getElementById("skibidi-action-container")) {
-        injectButton();
-      }
+    if (!platform) {
+      alert("Aucun média détecté sur cette page.");
+      return;
     }
-  }, 2000);
+
+    isConverting = true;
+    const originalContent = btnEl.innerHTML;
+    const isOverlay = btnEl.classList.contains("skibidi-overlay-main-btn");
+    btnEl.className = `${isOverlay ? "skibidi-overlay-main-btn" : "skibidi-yt-btn"} skibidi-loading`;
+    btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Préparation...</span>`;
+
+    try {
+      // 1. YouTube direct client mode
+      if (platform === "youtube" && (mode === "client-mp4" || mode === "client-audio")) {
+        btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Flux direct...</span>`;
+        const streams = await extractDirectStreams();
+
+        if (mode === "client-mp4" && streams?.directMp4Url) {
+          const res = await chrome.runtime.sendMessage({
+            action: "DIRECT_CLIENT_DOWNLOAD",
+            streamUrl: streams.directMp4Url,
+            title: streams.title,
+            artist: streams.artist,
+            format: "mp4",
+            bitrate: streams.directMp4Quality || "720p",
+            thumbnail: streams.thumbnail,
+            originalUrl: currentUrl,
+          });
+          if (!res?.success) throw new Error(res?.error || "Échec direct MP4");
+          showSuccess(btnEl, isOverlay);
+          return;
+        }
+
+        if (mode === "client-audio" && streams?.directAudioUrl) {
+          const res = await chrome.runtime.sendMessage({
+            action: "DIRECT_CLIENT_DOWNLOAD",
+            streamUrl: streams.directAudioUrl,
+            title: streams.title,
+            artist: streams.artist,
+            format: streams.directAudioExt || "m4a",
+            bitrate: "Direct",
+            thumbnail: streams.thumbnail,
+            originalUrl: currentUrl,
+          });
+          if (!res?.success) throw new Error(res?.error || "Échec direct audio");
+          showSuccess(btnEl, isOverlay);
+          return;
+        }
+      }
+
+      // 2. Vimeo Direct Stream Extraction
+      let vimeoDirectStream = null;
+      if (platform === "vimeo") {
+        btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Flux Vimeo...</span>`;
+        const vRes = await extractVimeoStream(mode === "client-mp4" ? "1080p" : "320k");
+        if (vRes?.streamUrl) {
+          vimeoDirectStream = vRes.streamUrl;
+        }
+      }
+
+      // 3. Server VPS Download for all platforms
+      btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Conversion...</span>`;
+      const response = await chrome.runtime.sendMessage({
+        action: "QUICK_DOWNLOAD_FROM_PAGE",
+        url: currentUrl,
+        options: {
+          format: mode === "client-mp4" ? "mp4" : "mp3",
+          bitrate: mode === "client-mp4" ? "1080p" : "320k",
+          streamUrl: vimeoDirectStream || undefined,
+        },
+      });
+
+      if (response && response.success) {
+        showSuccess(btnEl, isOverlay);
+      } else {
+        throw new Error(response?.error || "Erreur inconnue");
+      }
+    } catch (err) {
+      showError(btnEl, isOverlay, err.message);
+    } finally {
+      setTimeout(() => {
+        isConverting = false;
+        btnEl.className = isOverlay ? "skibidi-overlay-main-btn" : "skibidi-yt-btn";
+        btnEl.innerHTML = originalContent;
+      }, 3500);
+    }
+  }
+
+  function showSuccess(btnEl, isOverlay) {
+    btnEl.className = `${isOverlay ? "skibidi-overlay-main-btn" : "skibidi-yt-btn"} skibidi-success`;
+    btnEl.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      <span>Téléchargé !</span>
+    `;
+  }
+
+  function showError(btnEl, isOverlay, message) {
+    btnEl.className = `${isOverlay ? "skibidi-overlay-main-btn" : "skibidi-yt-btn"} skibidi-error`;
+    btnEl.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+      <span>Échec</span>
+    `;
+    console.error("SkibidiMP3 error:", message);
+  }
+
+  // -------------------------------------------------------------
+  // 6. Navigation & Observer Watchers
+  // -------------------------------------------------------------
+  function checkAndInject() {
+    const platform = detectMediaPage();
+    if (platform) {
+      injectDraggableFloatingOverlay();
+      if (platform === "youtube") {
+        injectYouTubeInPageButton();
+      }
+    } else {
+      const existing = document.getElementById("skibidi-draggable-overlay");
+      if (existing) existing.remove();
+    }
+  }
+
+  // Watch URL changes in Single Page Apps (YouTube, Spotify, Instagram, TikTok, etc.)
+  let lastUrl = window.location.href;
+  const urlObserver = new MutationObserver(() => {
+    if (window.location.href !== lastUrl) {
+      lastUrl = window.location.href;
+      setTimeout(checkAndInject, 500);
+      setTimeout(checkAndInject, 1500);
+    }
+  });
+  urlObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
+
+  window.addEventListener("yt-navigate-finish", () => setTimeout(checkAndInject, 600));
+  window.addEventListener("popstate", () => setTimeout(checkAndInject, 500));
+  window.addEventListener("load", () => setTimeout(checkAndInject, 600));
+
+  setInterval(checkAndInject, 2000);
 })();
