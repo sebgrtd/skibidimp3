@@ -7,6 +7,7 @@ import ConverterForm from "@/components/ConverterForm";
 import PlaylistConverter from "@/components/PlaylistConverter";
 import UserDashboard, { SyncedHistoryItem } from "@/components/UserDashboard";
 import FeaturesGrid from "@/components/FeaturesGrid";
+import ExtensionModal from "@/components/ExtensionModal";
 import { Loader2 } from "lucide-react";
 
 interface UserProfile {
@@ -19,6 +20,7 @@ export default function Home() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
 
   const [playlistInfo, setPlaylistInfo] = useState<any | null>(null);
   const [userHistory, setUserHistory] = useState<SyncedHistoryItem[]>([]);
@@ -78,6 +80,13 @@ export default function Home() {
         user={user}
         onLogout={handleLogout}
         onOpenAuth={() => setShowAuthModal(true)}
+        onOpenExtensionModal={() => setShowExtensionModal(true)}
+      />
+
+      {/* Extension Chrome Installation Modal */}
+      <ExtensionModal
+        isOpen={showExtensionModal}
+        onClose={() => setShowExtensionModal(false)}
       />
 
       {/* App Lock: Require auth */}

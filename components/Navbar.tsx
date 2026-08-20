@@ -2,15 +2,16 @@
 
 import React from "react";
 import Link from "next/link";
-import { Music2, Youtube, Radio, LogOut, Lock, ShieldCheck, Video, Image as ImageIcon, Film } from "lucide-react";
+import { Music2, Youtube, Radio, LogOut, Lock, ShieldCheck, Video, Image as ImageIcon, Film, Zap } from "lucide-react";
 
 interface NavbarProps {
   user: { id: string; username: string; isAdmin?: boolean } | null;
   onLogout: () => void;
   onOpenAuth: () => void;
+  onOpenExtensionModal?: () => void;
 }
 
-export default function Navbar({ user, onLogout, onOpenAuth }: NavbarProps) {
+export default function Navbar({ user, onLogout, onOpenAuth, onOpenExtensionModal }: NavbarProps) {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-8">
@@ -61,8 +62,22 @@ export default function Navbar({ user, onLogout, onOpenAuth }: NavbarProps) {
           </div>
         </div>
 
-        {/* User / Admin & Auth Actions */}
-        <div className="flex items-center gap-2.5">
+        {/* User / Admin & Extension Actions */}
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Extension Chrome Button */}
+          {onOpenExtensionModal && (
+            <button
+              type="button"
+              onClick={onOpenExtensionModal}
+              className="flex items-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-purple-300 transition-all shadow-sm group"
+              title="Installer l'extension Chrome (Zero-VPS & Bouton YouTube)"
+            >
+              <Zap className="h-3.5 w-3.5 text-purple-400 group-hover:scale-110 transition-transform" />
+              <span className="hidden sm:inline">Extension Chrome</span>
+              <span className="sm:hidden">Extension</span>
+            </button>
+          )}
+
           {user ? (
             <>
               {user.isAdmin && (
@@ -72,7 +87,7 @@ export default function Navbar({ user, onLogout, onOpenAuth }: NavbarProps) {
                   title="Accéder au panneau d'administration"
                 >
                   <ShieldCheck className="h-4 w-4 text-indigo-400" />
-                  <span className="hidden sm:inline">Administration</span>
+                  <span className="hidden md:inline">Administration</span>
                 </Link>
               )}
 
@@ -80,7 +95,7 @@ export default function Navbar({ user, onLogout, onOpenAuth }: NavbarProps) {
                 <div className="h-6 w-6 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-indigo-300 shrink-0">
                   {user.username.charAt(0).toUpperCase()}
                 </div>
-                <span className="text-xs font-semibold text-zinc-200 truncate max-w-[100px] sm:max-w-[150px]">
+                <span className="text-xs font-semibold text-zinc-200 truncate max-w-[80px] sm:max-w-[140px]">
                   {user.username}
                 </span>
                 <button
@@ -97,7 +112,7 @@ export default function Navbar({ user, onLogout, onOpenAuth }: NavbarProps) {
             <button
               type="button"
               onClick={onOpenAuth}
-              className="flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 transition-all"
+              className="flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-3.5 sm:px-4 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 transition-all"
             >
               <Lock className="h-3.5 w-3.5" />
               <span>Connexion</span>

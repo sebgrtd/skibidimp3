@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SkibidiMP3 Extension</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo-icon">⚡</div>
+        <div class="brand-text">
+          <h1>Skibidi<span>MP3</span></h1>
+          <p class="subtitle">Convertisseur Ultime</p>
+        </div>
+      </div>
+      <div class="auth-status" id="auth-status-badge" title="Statut du compte">
+        <span class="status-dot disconnected"></span>
+        <span class="status-text" id="auth-status-text">Hors ligne</span>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="convert-tab">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        Convertir
+      </button>
+      <button class="nav-tab" data-tab="history-tab">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+        Historique
+      </button>
+      <button class="nav-tab" data-tab="settings-tab">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        Compte
+      </button>
+    </nav>
+
+    <!-- Tab 1: Converter -->
+    <div id="convert-tab" class="tab-pane active">
+      <div class="input-group">
+        <input type="text" id="url-input" placeholder="Collez une URL (YouTube, Spotify, SoundCloud...)" autocomplete="off">
+        <button id="fetch-info-btn" class="btn-icon" title="Analyser le lien">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </button>
+      </div>
+
+      <!-- Preview card -->
+      <div id="media-card" class="media-card hidden">
+        <div class="media-preview">
+          <img id="media-thumb" src="" alt="Miniature" class="media-thumb">
+          <div class="media-details">
+            <div id="media-title-display" class="media-title">Titre du média</div>
+            <div id="media-artist-display" class="media-artist">Artiste</div>
+            <div class="media-badges">
+              <span id="media-platform-badge" class="badge">YouTube</span>
+              <span id="media-duration-badge" class="badge badge-dim">0:00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metadata customization toggle -->
+        <details class="metadata-accordion">
+          <summary>✏️ Personnaliser les tags MP3 (ID3)</summary>
+          <div class="accordion-content">
+            <label>Titre</label>
+            <input type="text" id="edit-title" placeholder="Titre du morceau">
+            <label>Artiste</label>
+            <input type="text" id="edit-artist" placeholder="Nom de l'artiste">
+          </div>
+        </details>
+      </div>
+
+      <!-- Options -->
+      <div class="options-grid">
+        <div class="option-field">
+          <label>Format</label>
+          <select id="format-select">
+            <option value="mp3" selected>MP3 (Audio)</option>
+            <option value="flac">FLAC (Lossless)</option>
+            <option value="wav">WAV (Haute qualité)</option>
+            <option value="m4a">M4A (AAC)</option>
+            <option value="mp4">MP4 (Vidéo)</option>
+          </select>
+        </div>
+
+        <div class="option-field" id="bitrate-container">
+          <label>Qualité / Bitrate</label>
+          <select id="bitrate-select">
+            <option value="320k" selected>320 kbps (Max)</option>
+            <option value="256k">256 kbps</option>
+            <option value="192k">192 kbps</option>
+            <option value="128k">128 kbps</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="option-field">
+        <label>Boost de Volume</label>
+        <select id="boost-select">
+          <option value="0" selected>Normal (0 dB)</option>
+          <option value="2">+2 dB (Léger boost)</option>
+          <option value="4">+4 dB (Boost moyen)</option>
+          <option value="6">+6 dB (Ultra boost)</option>
+        </select>
+      </div>
+
+      <!-- Download Button & Progress -->
+      <button id="download-btn" class="btn-primary">
+        <span class="btn-text">⚡ Télécharger en MP3</span>
+      </button>
+
+      <div id="progress-container" class="progress-container hidden">
+        <div class="progress-bar">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <div id="progress-label" class="progress-label">Préparation...</div>
+      </div>
+
+      <div id="status-message" class="status-message hidden"></div>
+    </div>
+
+    <!-- Tab 2: History -->
+    <div id="history-tab" class="tab-pane">
+      <div class="history-controls">
+        <input type="text" id="history-search" placeholder="Rechercher dans l'historique...">
+        <button id="history-refresh-btn" class="btn-icon" title="Rafraîchir">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+        </button>
+        <button id="history-clear-btn" class="btn-icon danger" title="Vider l'historique">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </div>
+
+      <div id="history-list" class="history-list">
+        <!-- Injected via JS -->
+      </div>
+    </div>
+
+    <!-- Tab 3: Settings / Account -->
+    <div id="settings-tab" class="tab-pane">
+      <div class="settings-section">
+        <h3>🌐 Serveur Backend</h3>
+        <label>URL de votre instance SkibidiMP3</label>
+        <div class="input-group">
+          <input type="text" id="server-url-input" placeholder="http://localhost:3030 ou https://votre-site.com">
+          <button id="save-server-btn" class="btn-secondary">Enregistrer</button>
+        </div>
+        <div class="quick-servers">
+          <button class="badge-btn" data-url="http://localhost:3030">Localhost (3030)</button>
+          <button class="badge-btn" data-url="http://localhost:3000">Localhost (3000)</button>
+        </div>
+      </div>
+
+      <div class="settings-section" id="account-section">
+        <h3>👤 Compte Utilisateur</h3>
+        
+        <!-- Logged Out View -->
+        <div id="auth-login-box">
+          <p class="section-desc">Connectez-vous pour synchroniser votre historique avec le site.</p>
+          <div class="form-group">
+            <label>Nom d'utilisateur ou Email</label>
+            <input type="text" id="login-username" placeholder="Identifiant">
+          </div>
+          <div class="form-group">
+            <label>Mot de passe</label>
+            <input type="password" id="login-password" placeholder="Mot de passe">
+          </div>
+          <button id="login-btn" class="btn-primary">Se connecter</button>
+        </div>
+
+        <!-- Logged In View -->
+        <div id="auth-user-box" class="hidden">
+          <div class="user-profile-card">
+            <div class="user-avatar">👤</div>
+            <div class="user-info">
+              <div id="user-display-name" class="user-name">Utilisateur</div>
+              <div class="user-status-text">Connecté & Synchronisé</div>
+            </div>
+            <button id="logout-btn" class="btn-danger-sm">Déconnexion</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3>⚙️ Préférences de téléchargement</h3>
+        <div class="option-field">
+          <label>Format par défaut</label>
+          <select id="pref-default-format">
+            <option value="mp3">MP3</option>
+            <option value="flac">FLAC</option>
+            <option value="wav">WAV</option>
+            <option value="mp4">MP4</option>
+          </select>
+        </div>
+        <div class="option-field">
+          <label>Bitrate par défaut</label>
+          <select id="pref-default-bitrate">
+            <option value="320k">320 kbps</option>
+            <option value="256k">256 kbps</option>
+            <option value="192k">192 kbps</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
