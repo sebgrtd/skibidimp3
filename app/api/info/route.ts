@@ -343,7 +343,7 @@ async function fetchTwitterMedia(trimmedUrl: string): Promise<{
   }
 }
 
-export function cleanYouTubeMediaUrl(rawUrl: string): { cleanUrl: string; isRealPlaylist: boolean } {
+function cleanYouTubeMediaUrl(rawUrl: string): { cleanUrl: string; isRealPlaylist: boolean } {
   try {
     const u = new URL(rawUrl);
     if (u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be")) {
