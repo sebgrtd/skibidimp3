@@ -111,6 +111,35 @@ async function extractMediaStream(downloadUrl: string, rawTemplateBase: string, 
   }
 }
 
+function cleanYouTubeMediaUrl(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl);
+    if (u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be")) {
+      const videoId = u.searchParams.get("v") || (u.hostname.includes("youtu.be") ? u.pathname.replace(/^\//, "").split("/")[0] : null);
+      if (videoId) {
+        return `https://www.youtube.com/watch?v=${videoId}`;
+      }
+    }
+  } catch {}
+  return rawUrl;
+}
+
+async function fetchYouTubeMetadataFallback(url: string) {
+  try {
+    const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+    const res = await fetch(oEmbedUrl, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        title: data.title || null,
+        artist: data.author_name || null,
+        coverUrl: data.thumbnail_url || null,
+      };
+    }
+  } catch {}
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   const tmpFiles: string[] = [];
 
@@ -125,17 +154,53 @@ export async function POST(req: NextRequest) {
       volumeBoost = "1.0",
       normalize = false,
       metadata = {},
+      editTitle,
+      editArtist,
+      thumbnail,
+      boost,
     } = body;
 
     if (!url || typeof url !== "string") {
       return NextResponse.json({ error: "URL invalide ou manquante." }, { status: 400 });
     }
 
-    const trimmedUrl = url.trim();
+    const trimmedUrl = cleanYouTubeMediaUrl(url.trim());
     const lowerFormat = format.toLowerCase();
     const isVideoDownload = lowerFormat === "mp4";
     const isGifDownload = lowerFormat === "gif";
     const isImageDownload = lowerFormat === "png" || lowerFormat === "jpg" || lowerFormat === "jpeg";
+
+    let metadata = body.metadata || {};
+
+    // Consolidate metadata from nested or top-level properties
+    let finalTitle = (metadata.title || editTitle || "").trim();
+    let finalArtist = (metadata.artist || editArtist || "").trim();
+    let finalCoverUrl = (metadata.coverUrl || thumbnail || "").trim();
+
+    // If metadata is incomplete for YouTube, fetch fallback from oEmbed
+    if ((!finalTitle || finalTitle.toLowerCase() === "audio" || !finalCoverUrl) && (trimmedUrl.includes("youtube.com") || trimmedUrl.includes("youtu.be"))) {
+      const fb = await fetchYouTubeMetadataFallback(trimmedUrl);
+      if (fb) {
+        if (!finalTitle || finalTitle.toLowerCase() === "audio") finalTitle = fb.title || finalTitle;
+        if (!finalArtist) finalArtist = fb.artist || finalArtist;
+        if (!finalCoverUrl) finalCoverUrl = fb.coverUrl || finalCoverUrl;
+      }
+    }
+
+    // Clean artist suffix if any
+    if (finalArtist) {
+      finalArtist = finalArtist.replace(/ - Topic$/, "").replace(/VEVO$/, "").trim();
+    }
+    if (finalArtist && finalTitle.toLowerCase().startsWith(finalArtist.toLowerCase() + " - ")) {
+      finalTitle = finalTitle.substring(finalArtist.length + 3).trim();
+    }
+
+    metadata = {
+      ...metadata,
+      title: finalTitle || "Audio",
+      artist: finalArtist || "",
+      coverUrl: finalCoverUrl,
+    };
 
     const uniqueId = Date.now() + "_" + Math.random().toString(36).substring(2, 9);
     const outPath = path.join(os.tmpdir(), `out_${uniqueId}.${lowerFormat}`);

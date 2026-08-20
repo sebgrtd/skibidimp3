@@ -162,12 +162,25 @@ function updateAuthUI(isAuthenticated, username) {
   }
 }
 
+function cleanYouTubeMediaUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    if (u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be")) {
+      const videoId = u.searchParams.get("v") || (u.hostname.includes("youtu.be") ? u.pathname.replace(/^\//, "").split("/")[0] : null);
+      if (videoId) {
+        return `https://www.youtube.com/watch?v=${videoId}`;
+      }
+    }
+  } catch {}
+  return rawUrl;
+}
+
 // Auto-detect YouTube or media URL in active tab
 async function detectActiveTabUrl() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab && tab.url) {
-      const u = tab.url;
+      let u = tab.url;
       const isMediaUrl = 
         u.includes("youtube.com/watch") || 
         u.includes("youtu.be/") || 
@@ -182,6 +195,9 @@ async function detectActiveTabUrl() {
         u.includes("pinterest.com/");
 
       if (isMediaUrl) {
+        if (u.includes("youtube.com") || u.includes("youtu.be")) {
+          u = cleanYouTubeMediaUrl(u);
+        }
         elements.urlInput.value = u;
         fetchMediaInfo(u);
       }
@@ -193,8 +209,13 @@ async function detectActiveTabUrl() {
 
 // Fetch Media Information
 async function fetchMediaInfo(url) {
-  const targetUrl = (url || elements.urlInput.value || "").trim();
+  let targetUrl = (url || elements.urlInput.value || "").trim();
   if (!targetUrl) return;
+
+  if (targetUrl.includes("youtube.com") || targetUrl.includes("youtu.be")) {
+    targetUrl = cleanYouTubeMediaUrl(targetUrl);
+    elements.urlInput.value = targetUrl;
+  }
 
   hideStatus();
   elements.fetchInfoBtn.disabled = true;
@@ -292,18 +313,29 @@ function buildSafeFilename(title, artist, format) {
 
 // Download Handler
 async function handleDownload() {
-  const url = elements.urlInput.value.trim();
+  let url = elements.urlInput.value.trim();
   if (!url) {
     showStatus("Veuillez saisir une URL valide.", "error");
     return;
+  }
+
+  if (url.includes("youtube.com") || url.includes("youtu.be")) {
+    url = cleanYouTubeMediaUrl(url);
+    elements.urlInput.value = url;
+  }
+
+  // If info not fetched yet, fetch it first
+  if (!state.currentMedia || !state.currentMedia.title) {
+    await fetchMediaInfo(url);
   }
 
   const serverUrl = cleanServerUrl(state.serverUrl);
   const format = elements.formatSelect.value;
   const bitrate = elements.bitrateSelect.value;
   const boost = elements.boostSelect.value;
-  const editTitle = elements.editTitle.value.trim() || (state.currentMedia?.title) || "Audio";
+  const editTitle = elements.editTitle.value.trim() || (state.currentMedia?.title) || "Musique";
   const editArtist = elements.editArtist.value.trim() || (state.currentMedia?.artist) || "";
+  const thumbnail = state.currentMedia?.thumbnail || "";
 
   elements.downloadBtn.disabled = true;
   elements.progressContainer.classList.remove("hidden");
@@ -334,7 +366,12 @@ async function handleDownload() {
       boost,
       editTitle,
       editArtist,
-      thumbnail: state.currentMedia?.thumbnail,
+      thumbnail,
+      metadata: {
+        title: editTitle,
+        artist: editArtist,
+        coverUrl: thumbnail,
+      },
     };
 
     const res = await fetch(`${serverUrl}/api/download`, {

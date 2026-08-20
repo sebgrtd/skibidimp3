@@ -343,6 +343,34 @@ async function fetchTwitterMedia(trimmedUrl: string): Promise<{
   }
 }
 
+export function cleanYouTubeMediaUrl(rawUrl: string): { cleanUrl: string; isRealPlaylist: boolean } {
+  try {
+    const u = new URL(rawUrl);
+    if (u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be")) {
+      const videoId = u.searchParams.get("v") || (u.hostname.includes("youtu.be") ? u.pathname.replace(/^\//, "").split("/")[0] : null);
+      const listId = u.searchParams.get("list");
+
+      // Check if it's a YouTube Radio / Mix (starts with RD), or watch URL with tracking/mix parameters
+      if (videoId && (listId?.startsWith("RD") || listId?.startsWith("UL") || listId?.startsWith("LL") || u.pathname.includes("/watch"))) {
+        // Only treat as real playlist if specifically on /playlist page
+        if (listId && !listId.startsWith("RD") && !listId.startsWith("LL") && u.pathname.includes("/playlist")) {
+          return { cleanUrl: `https://www.youtube.com/playlist?list=${listId}`, isRealPlaylist: true };
+        }
+        return { cleanUrl: `https://www.youtube.com/watch?v=${videoId}`, isRealPlaylist: false };
+      }
+
+      if (listId && !listId.startsWith("RD")) {
+        return { cleanUrl: `https://www.youtube.com/playlist?list=${listId}`, isRealPlaylist: true };
+      }
+      
+      if (videoId) {
+        return { cleanUrl: `https://www.youtube.com/watch?v=${videoId}`, isRealPlaylist: false };
+      }
+    }
+  } catch {}
+  return { cleanUrl: rawUrl, isRealPlaylist: false };
+}
+
 export async function POST(req: NextRequest) {
   let trimmedUrl = "";
   let platform: PlatformType = "generic";
@@ -355,6 +383,12 @@ export async function POST(req: NextRequest) {
     }
 
     trimmedUrl = url.trim();
+
+    // Clean YouTube URLs with radio mix or extraneous tracking params
+    if (trimmedUrl.includes("youtube.com") || trimmedUrl.includes("youtu.be")) {
+      const cleaned = cleanYouTubeMediaUrl(trimmedUrl);
+      trimmedUrl = cleaned.cleanUrl;
+    }
 
     // 1. Identify Platform
     if (trimmedUrl.includes("youtube.com") || trimmedUrl.includes("youtu.be")) {

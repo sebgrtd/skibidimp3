@@ -157,11 +157,25 @@ async function handleDirectClientDownload(data) {
   return { title, artist, filename: safeFilename };
 }
 
+function cleanYouTubeMediaUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    if (u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be")) {
+      const videoId = u.searchParams.get("v") || (u.hostname.includes("youtu.be") ? u.pathname.replace(/^\//, "").split("/")[0] : null);
+      if (videoId) {
+        return `https://www.youtube.com/watch?v=${videoId}`;
+      }
+    }
+  } catch {}
+  return rawUrl;
+}
+
 // Server-Side Transcode Download Handler
 async function handleQuickDownload(url, customOptions = {}) {
   const settings = await getSettings();
   const serverUrl = formatServerUrl(settings.serverUrl);
   const token = settings.authToken;
+  const targetUrl = cleanYouTubeMediaUrl(url);
 
   notify("Conversion en cours...", "Récupération des informations et encodage audio...");
 
@@ -169,7 +183,7 @@ async function handleQuickDownload(url, customOptions = {}) {
   const infoRes = await fetch(`${serverUrl}/api/info`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url: targetUrl }),
   });
 
   if (!infoRes.ok) {
@@ -186,13 +200,18 @@ async function handleQuickDownload(url, customOptions = {}) {
 
   // 2. Trigger Download API
   const downloadPayload = {
-    url: info.originalUrl || info.url || url,
+    url: info.originalUrl || info.url || targetUrl,
     format,
     bitrate,
     boost,
     editTitle: title,
     editArtist: artist,
     thumbnail: info.thumbnail,
+    metadata: {
+      title,
+      artist,
+      coverUrl: info.thumbnail,
+    },
   };
 
   const headers = { "Content-Type": "application/json" };
