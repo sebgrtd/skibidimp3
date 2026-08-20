@@ -1,6 +1,6 @@
 // SkibidiMP3 - Background Service Worker (Precise Filename & Direct Download)
 
-const DEFAULT_SERVER_URL = "http://localhost:3030";
+const DEFAULT_SERVER_URL = "https://skibidi-mp3.sebastien-gratade.fr";
 
 async function getSettings() {
   const result = await chrome.storage.local.get({

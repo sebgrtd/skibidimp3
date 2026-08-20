@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SkibidiMP3 - YouTube MP3 Booster",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Convertissez et téléchargez des musiques et vidéos en 1 clic avec synchronisation de l'historique.",
   "icons": {
     "16": "icons/icon16.png",
@@ -39,10 +39,15 @@
   "permissions": [
     "storage",
     "activeTab",
+    "tabs",
+    "scripting",
     "downloads",
     "notifications"
   ],
   "host_permissions": [
+    "*://*.youtube.com/*",
+    "*://*.youtu.be/*",
+    "*://*.googlevideo.com/*",
     "http://localhost:*/*",
     "http://127.0.0.1:*/*",
     "https://*/*",

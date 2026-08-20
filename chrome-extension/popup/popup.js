@@ -1,6 +1,6 @@
 // SkibidiMP3 - Popup Script (Dynamic Platform Formats & Modes)
 
-const DEFAULT_SERVER_URL = "http://localhost:3030";
+const DEFAULT_SERVER_URL = "https://skibidi-mp3.sebastien-gratade.fr";
 
 let state = {
   serverUrl: DEFAULT_SERVER_URL,
@@ -99,6 +99,12 @@ async function loadStoredSettings() {
     defaultBitrate: "320k",
     defaultBoost: "0",
   });
+
+  // Automatically migrate from localhost to production URL if needed
+  if (!data.serverUrl || data.serverUrl === "http://localhost:3030") {
+    data.serverUrl = DEFAULT_SERVER_URL;
+    await chrome.storage.local.set({ serverUrl: DEFAULT_SERVER_URL });
+  }
 
   state = { ...state, ...data };
 
@@ -340,7 +346,15 @@ function updateAuthUI(isAuthenticated, username) {
 // Auto-detect YouTube or media URL in active tab
 async function detectActiveTabUrl() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    let tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (!tabs || !tabs.length) {
+      tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    }
+    if (!tabs || !tabs.length) {
+      tabs = await chrome.tabs.query({ active: true });
+    }
+
+    const tab = tabs && tabs[0];
     if (tab && tab.url) {
       let u = tab.url;
       const isMediaUrl = 
@@ -361,6 +375,15 @@ async function detectActiveTabUrl() {
           u = cleanYouTubeMediaUrl(u);
         }
         elements.urlInput.value = u;
+
+        // Immediately pre-fill basic info from browser tab if available
+        if (tab.title && !elements.editTitle.value) {
+          const rawTitle = tab.title.replace(/ - YouTube$/, "").trim();
+          elements.mediaTitleDisplay.textContent = rawTitle;
+          elements.editTitle.value = rawTitle;
+          elements.mediaCard.classList.remove("hidden");
+        }
+
         fetchMediaInfo(u);
       }
     }

@@ -11,10 +11,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Dossier extension introuvable." }, { status: 404 });
   }
 
-  // Detect current server origin (e.g. https://alexandre-pruvost.fr or http://localhost:3030)
-  const proto = req.headers.get("x-forwarded-proto") || "http";
-  const host = req.headers.get("host") || "localhost:3030";
-  const currentOrigin = `${proto}://${host}`;
+  // Detect current server origin (e.g. https://skibidi-mp3.sebastien-gratade.fr)
+  let proto = req.headers.get("x-forwarded-proto") || "https";
+  const host = req.headers.get("host") || "skibidi-mp3.sebastien-gratade.fr";
+  if (host.includes("sebastien-gratade.fr") || host.includes("alexandre-pruvost.fr") || !host.includes("localhost")) {
+    proto = "https";
+  }
+  const currentOrigin = host.includes("localhost") ? "http://localhost:3030" : `${proto}://${host}`;
 
   const uniqueId = Date.now() + "_" + Math.random().toString(36).substring(2, 7);
   const zipPath = path.join(os.tmpdir(), `skibidimp3_extension_${uniqueId}.zip`);
