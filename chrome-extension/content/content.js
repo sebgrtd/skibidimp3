@@ -64,13 +64,42 @@
   // Extract Vimeo player stream from DOM or window.playerConfig
   function extractVimeoStream(targetQuality) {
     return new Promise((resolve) => {
-      // 1. Check direct video tag
-      const videoEl = document.querySelector("video");
-      if (videoEl && videoEl.src && videoEl.src.startsWith("http")) {
-        return resolve({ streamUrl: videoEl.src });
-      }
+      // 1. Check window.playerConfig (Most complete & authoritative)
+      try {
+        if (window.playerConfig && window.playerConfig.request && window.playerConfig.request.files) {
+          const files = window.playerConfig.request.files;
+          const progressive = files.progressive || [];
+          if (progressive.length > 0) {
+            const qNum = parseInt(targetQuality) || 1080;
+            progressive.sort((a, b) => (parseInt(b.quality) || b.height || 0) - (parseInt(a.quality) || a.height || 0));
+            const matched = progressive.find(p => (parseInt(p.quality) || p.height || 0) <= qNum) || progressive[0];
+            if (matched?.url) return resolve({ streamUrl: matched.url });
+          }
+          const hls = files.hls || {};
+          const defaultCdn = hls.default_cdn;
+          if (defaultCdn && hls.cdns && hls.cdns[defaultCdn]?.url) {
+            return resolve({ streamUrl: hls.cdns[defaultCdn].url });
+          }
+        }
+      } catch {}
 
-      // 2. Check script tags for window.playerConfig
+      // 2. Check performance resources for master playlists (Excluding range fragments)
+      try {
+        const entries = performance.getEntriesByType("resource");
+        for (let i = entries.length - 1; i >= 0; i--) {
+          const u = entries[i].name;
+          if (u && (u.includes("vimeocdn.com") || u.includes("akamaized.net"))) {
+            if (u.includes("playlist.m3u8") || u.includes("master.json") || u.includes("master.m3u8")) {
+              return resolve({ streamUrl: u });
+            }
+            if (u.includes(".mp4") && !u.includes("&range=") && !u.includes("/range/")) {
+              return resolve({ streamUrl: u });
+            }
+          }
+        }
+      } catch {}
+
+      // 3. Check script tags for playerConfig
       for (const script of document.scripts) {
         if (script.textContent && (script.textContent.includes("playerConfig") || script.textContent.includes("window.vimeo"))) {
           const match = script.textContent.match(/window\.playerConfig\s*=\s*({.+?});/) ||
@@ -94,6 +123,12 @@
             } catch {}
           }
         }
+      }
+
+      // 4. Check direct video tag (Only if not blob and not range)
+      const videoEl = document.querySelector("video");
+      if (videoEl && videoEl.src && videoEl.src.startsWith("http") && !videoEl.src.includes("&range=") && !videoEl.src.includes("/range/")) {
+        return resolve({ streamUrl: videoEl.src });
       }
 
       resolve(null);

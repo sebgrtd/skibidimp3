@@ -548,45 +548,70 @@ async function resolveVimeoDirectStream(targetUrl, targetQuality = "1080p") {
     const vimeoId = idMatch[1];
 
     const streamExtractorFunc = (qStr) => {
-      // A. Check performance resources for CDN streams
+      // 1. Check window.playerConfig (Authoritative progressive MP4s & HLS master)
       try {
-        const entries = performance.getEntriesByType("resource");
-        for (let i = entries.length - 1; i >= 0; i--) {
-          const u = entries[i].name;
-          if (u && (u.includes("vimeocdn.com") || u.includes("akamaized.net")) && (u.includes(".m3u8") || u.includes("master.json") || u.includes(".mp4"))) {
-            return u;
+        if (window.playerConfig && window.playerConfig.request && window.playerConfig.request.files) {
+          const files = window.playerConfig.request.files;
+          const progressive = files.progressive || [];
+          if (progressive.length > 0) {
+            const qNum = parseInt(qStr) || 1080;
+            progressive.sort((a, b) => (parseInt(b.quality) || b.height || 0) - (parseInt(a.quality) || a.height || 0));
+            const matched = progressive.find(p => (parseInt(p.quality) || p.height || 0) <= qNum) || progressive[0];
+            if (matched?.url) return matched.url;
+          }
+          const hls = files.hls || {};
+          const defaultCdn = hls.default_cdn;
+          if (defaultCdn && hls.cdns && hls.cdns[defaultCdn]?.url) {
+            return hls.cdns[defaultCdn].url;
           }
         }
       } catch {}
 
-      // B. Check video element src
-      const v = document.querySelector("video");
-      if (v && v.src && v.src.startsWith("http")) return v.src;
-
-      // C. Check window.playerConfig
-      if (window.playerConfig && window.playerConfig.request && window.playerConfig.request.files) {
-        const files = window.playerConfig.request.files;
-        const progressive = files.progressive || [];
-        if (progressive.length > 0) {
-          const qNum = parseInt(qStr) || 1080;
-          progressive.sort((a, b) => (parseInt(b.quality) || b.height || 0) - (parseInt(a.quality) || a.height || 0));
-          const matched = progressive.find(p => (parseInt(p.quality) || p.height || 0) <= qNum) || progressive[0];
-          if (matched?.url) return matched.url;
+      // 2. Check performance resources for master manifests (Excluding range fragments)
+      try {
+        const entries = performance.getEntriesByType("resource");
+        for (let i = entries.length - 1; i >= 0; i--) {
+          const u = entries[i].name;
+          if (u && (u.includes("vimeocdn.com") || u.includes("akamaized.net"))) {
+            if (u.includes("playlist.m3u8") || u.includes("master.json") || u.includes("master.m3u8")) {
+              return u;
+            }
+            if (u.includes(".mp4") && !u.includes("&range=") && !u.includes("/range/")) {
+              return u;
+            }
+          }
         }
-        const hls = files.hls || {};
-        const defaultCdn = hls.default_cdn;
-        if (defaultCdn && hls.cdns && hls.cdns[defaultCdn]?.url) {
-          return hls.cdns[defaultCdn].url;
-        }
-      }
+      } catch {}
 
-      // D. Check scripts for master.json or m3u8 URLs
+      // 3. Check scripts for playerConfig or master URLs
       for (const s of document.scripts) {
-        if (s.textContent && (s.textContent.includes(".m3u8") || s.textContent.includes("vimeocdn.com"))) {
-          const m = s.textContent.match(/https:\/\/[^"'\s]+\.vimeocdn\.com[^"'\s]+(?:master\.json|\.m3u8|\.mp4)[^"'\s]*/);
-          if (m) return m[0];
+        if (s.textContent && (s.textContent.includes("playerConfig") || s.textContent.includes("window.vimeo"))) {
+          const match = s.textContent.match(/window\.playerConfig\s*=\s*({.+?});/) ||
+                        s.textContent.match(/config\s*=\s*({.+?});/);
+          if (match) {
+            try {
+              const data = JSON.parse(match[1]);
+              const files = data?.request?.files || {};
+              const progressive = files.progressive || [];
+              if (progressive.length > 0) {
+                progressive.sort((a, b) => (parseInt(b.quality) || b.height || 0) - (parseInt(a.quality) || a.height || 0));
+                const qNum = parseInt(qStr) || 1080;
+                const matched = progressive.find(p => (parseInt(p.quality) || p.height || 0) <= qNum) || progressive[0];
+                if (matched?.url) return matched.url;
+              }
+              const hls = files.hls || {};
+              const defaultCdn = hls.default_cdn;
+              if (defaultCdn && hls.cdns && hls.cdns[defaultCdn]?.url) {
+                return hls.cdns[defaultCdn].url;
+              }
+            } catch {}
+          }
         }
       }
+
+      // 4. Check direct video tag (Only if not blob and not range)
+      const v = document.querySelector("video");
+      if (v && v.src && v.src.startsWith("http") && !v.src.includes("&range=") && !v.src.includes("/range/")) return v.src;
 
       return null;
     };
