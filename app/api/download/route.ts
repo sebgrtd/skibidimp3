@@ -89,6 +89,20 @@ async function extractMediaStream(downloadUrl: string, rawTemplateBase: string, 
     return singleAttemptDownload(ytDlpCommand, ytDlpBaseArgs, downloadUrl, tpl, flags, USER_AGENT, isVideo, customCookieFile);
   };
 
+  const hasCookies = Boolean((customCookieFile && fs.existsSync(customCookieFile)) || fs.existsSync(COOKIES_FILE) || fs.existsSync(ALT_COOKIES));
+
+  if (hasCookies) {
+    try {
+      return await attempt("c1", ["--extractor-args", "youtube:player_client=web,mweb,default"]);
+    } catch (cErr1: any) {
+      try {
+        return await attempt("c2", ["--extractor-args", "youtube:player_client=mweb,tv_embedded"]);
+      } catch (cErr2) {
+        // Fall through to standard sequence
+      }
+    }
+  }
+
   // Attempt 1: android,web,tv
   try {
     return await attempt("a1", ["--extractor-args", "youtube:player_client=android,web,tv"]);
