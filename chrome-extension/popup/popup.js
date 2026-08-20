@@ -532,6 +532,10 @@ async function handleDownload() {
       progress += Math.floor(Math.random() * 8) + 2;
       elements.progressFill.style.width = `${progress}%`;
       if (progress > 50) elements.progressLabel.textContent = isImage ? "Traitement de l'image..." : isVideo ? "Encodage vidéo HD..." : isGif ? "Conversion GIF..." : "Conversion 320kbps...";
+      if (progress > 75) elements.progressLabel.textContent = "Finalisation du fichier...";
+    }
+  }, 400);
+
   // --- DIRECT CLIENT-SIDE MP4 DOWNLOAD (Zero VPS - 100% Bypass Bot Walls) ---
   if (isVideo && (url.includes("youtube.com") || url.includes("youtu.be"))) {
     let directStream = null;
