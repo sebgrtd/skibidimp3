@@ -45,6 +45,20 @@ export default function Home() {
 
   const fetchUserHistory = async () => {
     try {
+      // 1. Synchroniser l'historique local si présent
+      try {
+        const localItems = JSON.parse(localStorage.getItem("skibidi_local_history") || "[]");
+        if (Array.isArray(localItems) && localItems.length > 0) {
+          await fetch("/api/user/history", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items: localItems }),
+          });
+          localStorage.removeItem("skibidi_local_history");
+        }
+      } catch {}
+
+      // 2. Récupérer l'historique complet synchronisé
       const res = await fetch("/api/user/history", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();

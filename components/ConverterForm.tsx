@@ -230,33 +230,35 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
 
       toast.success(`Téléchargement de « ${cleanTitle} » réussi !`);
 
-      // Save to user account history
+      const newHistoryItem = {
+        id: Date.now().toString(),
+        title: editTitle || mediaInfo.title,
+        artist: editArtist || mediaInfo.artist,
+        thumbnail: mediaInfo.thumbnail,
+        format,
+        bitrate: isVideo ? "1080p" : isImage ? "HD" : bitrate,
+        date: new Date().toLocaleDateString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+        url: mediaInfo.originalUrl || mediaInfo.url,
+      };
+
+      // Always save locally in localStorage
+      try {
+        const stored = JSON.parse(localStorage.getItem("skibidi_local_history") || "[]");
+        const updated = [newHistoryItem, ...stored.filter((h: any) => h.id !== newHistoryItem.id)].slice(0, 100);
+        localStorage.setItem("skibidi_local_history", JSON.stringify(updated));
+      } catch {}
+
+      // Save to user account history if logged in
       try {
         await fetch("/api/user/history", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: editTitle || mediaInfo.title,
-            artist: editArtist || mediaInfo.artist,
-            thumbnail: mediaInfo.thumbnail,
-            format,
-            bitrate: isVideo ? "1080p" : isImage ? "HD" : bitrate,
-            url: mediaInfo.originalUrl || mediaInfo.url,
-          }),
+          body: JSON.stringify(newHistoryItem),
         });
       } catch {}
 
       if (onAddToHistory) {
-        onAddToHistory({
-          id: Date.now().toString(),
-          title: editTitle || mediaInfo.title,
-          artist: editArtist || mediaInfo.artist,
-          thumbnail: mediaInfo.thumbnail,
-          format,
-          bitrate: isVideo ? "1080p" : isImage ? "HD" : bitrate,
-          date: new Date().toLocaleDateString(),
-          url: mediaInfo.originalUrl || mediaInfo.url,
-        });
+        onAddToHistory(newHistoryItem);
       }
 
       await new Promise((r) => setTimeout(r, 1000));

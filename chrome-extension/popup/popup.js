@@ -636,7 +636,28 @@ async function handleDownload() {
       saveAs: false,
     });
 
-    // Save to user history if logged in
+    // Save to local history in chrome.storage.local
+    const localRecord = {
+      id: Date.now().toString(),
+      title: editTitle,
+      artist: editArtist,
+      thumbnail: state.currentMedia?.thumbnail || thumbnail,
+      format,
+      bitrate: isVideo ? "1080p" : isImage ? "HD" : bitrate,
+      url: state.currentMedia?.originalUrl || state.currentMedia?.url || url,
+      date: new Date().toLocaleDateString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+      synced: Boolean(state.authToken),
+    };
+
+    try {
+      const storageData = await chrome.storage.local.get({ localHistory: [] });
+      const currentLocalHistory = storageData.localHistory || [];
+      const updatedLocalHistory = [localRecord, ...currentLocalHistory.filter(h => h.id !== localRecord.id)].slice(0, 100);
+      await chrome.storage.local.set({ localHistory: updatedLocalHistory });
+      state.history = updatedLocalHistory;
+    } catch {}
+
+    // If logged in, also sync directly with server
     if (state.authToken) {
       try {
         await fetch(`${serverUrl}/api/user/history`, {
@@ -645,14 +666,7 @@ async function handleDownload() {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${state.authToken}`,
           },
-          body: JSON.stringify({
-            title: editTitle,
-            artist: editArtist,
-            thumbnail: state.currentMedia?.thumbnail,
-            format,
-            bitrate: isVideo ? "1080p" : isImage ? "HD" : bitrate,
-            url: state.currentMedia?.originalUrl || state.currentMedia?.url || url,
-          }),
+          body: JSON.stringify(localRecord),
         });
       } catch (histErr) {
         console.warn("History save error:", histErr);
@@ -673,17 +687,39 @@ async function handleDownload() {
   }
 }
 
-// --- History Management ---
+// --- History Management (Offline Local + Online Auto-Sync) ---
 async function loadHistory() {
   const serverUrl = cleanServerUrl(state.serverUrl);
+  const storageData = await chrome.storage.local.get({ localHistory: [] });
+  const localHistory = storageData.localHistory || [];
+
+  // If not logged in, display local history directly
   if (!state.authToken) {
-    renderHistoryPlaceholder("Connectez-vous dans l'onglet Compte pour synchroniser votre historique avec le site.");
+    state.history = localHistory;
+    renderHistoryList(localHistory, false);
     return;
   }
 
-  elements.historyList.innerHTML = `<div class="empty-state">Chargement de l'historique...</div>`;
+  // If logged in: sync unsynced local items to server first, then fetch account history
+  elements.historyList.innerHTML = `<div class="empty-state">Synchronisation de l'historique...</div>`;
 
   try {
+    const unsynced = localHistory.filter((item) => !item.synced);
+    if (unsynced.length > 0) {
+      try {
+        await fetch(`${serverUrl}/api/user/history`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${state.authToken}`,
+          },
+          body: JSON.stringify({ items: unsynced }),
+        });
+      } catch (e) {
+        console.warn("Batch history sync error:", e);
+      }
+    }
+
     const res = await fetch(`${serverUrl}/api/user/history`, {
       headers: { "Authorization": `Bearer ${state.authToken}` },
     });
@@ -691,21 +727,25 @@ async function loadHistory() {
     if (!res.ok) {
       if (res.status === 401) {
         updateAuthUI(false, null);
-        renderHistoryPlaceholder("Session expirée. Veuillez vous reconnecter.");
+        state.history = localHistory;
+        renderHistoryList(localHistory, false);
         return;
       }
       throw new Error(`Erreur serveur (${res.status})`);
     }
 
     const data = await res.json();
-    state.history = data.history || [];
-    renderHistoryList(state.history);
+    const serverHistory = (data.history || []).map((h) => ({ ...h, synced: true }));
+    state.history = serverHistory;
+    await chrome.storage.local.set({ localHistory: serverHistory });
+    renderHistoryList(serverHistory, true);
   } catch (err) {
-    renderHistoryPlaceholder(`Impossible de charger l'historique (${err.message})`);
+    state.history = localHistory;
+    renderHistoryList(localHistory, false);
   }
 }
 
-function renderHistoryList(items) {
+function renderHistoryList(items, isOnline = false) {
   const search = (elements.historySearch.value || "").toLowerCase().trim();
   const filtered = items.filter(
     (item) =>
@@ -714,11 +754,25 @@ function renderHistoryList(items) {
   );
 
   if (filtered.length === 0) {
-    renderHistoryPlaceholder(search ? "Aucun résultat trouvé." : "Votre historique est vide.");
+    renderHistoryPlaceholder(
+      search 
+        ? "Aucun résultat trouvé." 
+        : isOnline 
+          ? "Votre historique synchronisé est vide." 
+          : "Votre historique local est vide."
+    );
     return;
   }
 
   elements.historyList.innerHTML = "";
+
+  if (!isOnline && filtered.length > 0) {
+    const notice = document.createElement("div");
+    notice.style.cssText = "font-size:10px; color:var(--text-muted); background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:6px; padding:6px 10px; margin-bottom:8px; display:flex; align-items:center; gap:6px;";
+    notice.innerHTML = `<span>💾</span> <span>Historique local (Connectez-vous pour le synchroniser).</span>`;
+    elements.historyList.appendChild(notice);
+  }
+
   filtered.forEach((item) => {
     const el = document.createElement("div");
     el.className = "history-item";
@@ -772,46 +826,54 @@ function renderHistoryPlaceholder(text) {
 }
 
 async function deleteHistoryItem(id) {
-  const serverUrl = cleanServerUrl(state.serverUrl);
-  try {
-    const res = await fetch(`${serverUrl}/api/user/history`, {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${state.authToken}`,
-      },
-      body: JSON.stringify({ id }),
-    });
+  // Always delete from local storage
+  const storageData = await chrome.storage.local.get({ localHistory: [] });
+  const updatedLocal = (storageData.localHistory || []).filter((h) => h.id !== id);
+  await chrome.storage.local.set({ localHistory: updatedLocal });
+  state.history = state.history.filter((h) => h.id !== id);
+  renderHistoryList(state.history, Boolean(state.authToken));
 
-    if (res.ok) {
-      state.history = state.history.filter((h) => h.id !== id);
-      renderHistoryList(state.history);
+  // If logged in, also delete on server
+  if (state.authToken) {
+    const serverUrl = cleanServerUrl(state.serverUrl);
+    try {
+      await fetch(`${serverUrl}/api/user/history`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${state.authToken}`,
+        },
+        body: JSON.stringify({ id }),
+      });
+    } catch (err) {
+      console.error("Delete history error:", err);
     }
-  } catch (err) {
-    console.error("Delete history error:", err);
   }
 }
 
 async function clearAllHistory() {
   if (!confirm("Voulez-vous vraiment effacer tout votre historique ?")) return;
 
-  const serverUrl = cleanServerUrl(state.serverUrl);
-  try {
-    const res = await fetch(`${serverUrl}/api/user/history`, {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${state.authToken}`,
-      },
-      body: JSON.stringify({ clearAll: true }),
-    });
+  // Always clear local storage
+  await chrome.storage.local.set({ localHistory: [] });
+  state.history = [];
+  renderHistoryList([], Boolean(state.authToken));
 
-    if (res.ok) {
-      state.history = [];
-      renderHistoryList(state.history);
+  // If logged in, clear on server
+  if (state.authToken) {
+    const serverUrl = cleanServerUrl(state.serverUrl);
+    try {
+      await fetch(`${serverUrl}/api/user/history`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${state.authToken}`,
+        },
+        body: JSON.stringify({ clearAll: true }),
+      });
+    } catch (err) {
+      console.error("Clear history error:", err);
     }
-  } catch (err) {
-    console.error("Clear history error:", err);
   }
 }
 
@@ -829,7 +891,7 @@ function setupEventListeners() {
   // History
   elements.historyRefreshBtn.addEventListener("click", loadHistory);
   elements.historyClearBtn.addEventListener("click", clearAllHistory);
-  elements.historySearch.addEventListener("input", () => renderHistoryList(state.history));
+  elements.historySearch.addEventListener("input", () => renderHistoryList(state.history, Boolean(state.authToken)));
 
   // Server config
   elements.saveServerBtn.addEventListener("click", async () => {
@@ -883,7 +945,10 @@ function setupEventListeners() {
 
       updateAuthUI(true, data.user.username);
       elements.loginPassword.value = "";
-      showStatus("Connexion réussie !", "success");
+      showStatus("Connexion réussie ! Historique synchronisé.", "success");
+
+      // Auto sync local history to account
+      await loadHistory();
     } catch (err) {
       alert(err.message);
     } finally {
@@ -898,8 +963,8 @@ function setupEventListeners() {
     state.authUser = null;
     await chrome.storage.local.remove(["authToken", "authUser"]);
     updateAuthUI(false, null);
-    elements.historyList.innerHTML = "";
     showStatus("Déconnecté.", "success");
+    await loadHistory();
   });
 
   // Preferences
