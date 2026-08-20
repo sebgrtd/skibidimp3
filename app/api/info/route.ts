@@ -30,7 +30,7 @@ function runYtDlp(args: string[]): Promise<string> {
       cookieArgs.push("--cookies", ALT_COOKIES);
     }
 
-    const fullArgs = isModule ? ["-m", "yt_dlp", ...cookieArgs, ...args] : [...cookieArgs, ...args];
+    const fullArgs = isModule ? ["-m", "yt_dlp", "--remote-components", "ejs:github", ...cookieArgs, ...args] : ["--remote-components", "ejs:github", ...cookieArgs, ...args];
     const command = isModule ? PYTHON_PATH : "yt-dlp";
 
     const proc = spawn(command, fullArgs);

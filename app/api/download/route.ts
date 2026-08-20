@@ -42,6 +42,7 @@ async function singleAttemptDownload(
 
     const args = [
       ...ytDlpBaseArgs,
+      "--remote-components", "ejs:github",
       ...cookieArgs,
       "--user-agent", userAgent,
       ...formatArg,
