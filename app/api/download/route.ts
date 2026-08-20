@@ -318,8 +318,8 @@ export async function POST(req: NextRequest) {
       const targetVideoQuality = quality || videoQuality || (bitrate?.includes("p") ? bitrate : "1080p");
 
       let downloadedRaw = "";
-      // If direct video url or HLS stream passed (e.g. from Vimeo / Twitter / Pinterest)
-      if (trimmedUrl.startsWith("http") && (trimmedUrl.includes("vimeocdn.com") || trimmedUrl.includes(".m3u8"))) {
+      // If direct video url or HLS stream passed (e.g. from Vimeo / Twitter / Pinterest / Akamai)
+      if (trimmedUrl.startsWith("http") && (trimmedUrl.includes("vimeocdn.com") || trimmedUrl.includes("akamaized.net") || trimmedUrl.includes(".m3u8") || trimmedUrl.includes("master.json"))) {
         downloadedRaw = trimmedUrl;
       } else if (trimmedUrl.startsWith("http") && (trimmedUrl.includes(".mp4") || trimmedUrl.includes("video.twimg.com") || trimmedUrl.includes("v.pinimg.com"))) {
         const vidRes = await fetch(trimmedUrl);
@@ -455,7 +455,7 @@ export async function POST(req: NextRequest) {
     const rawTemplate = path.join(os.tmpdir(), `${rawPattern}.%(ext)s`);
 
     let downloadedRaw = "";
-    if (trimmedUrl.startsWith("http") && (trimmedUrl.includes("vimeocdn.com") || trimmedUrl.includes(".m3u8"))) {
+    if (trimmedUrl.startsWith("http") && (trimmedUrl.includes("vimeocdn.com") || trimmedUrl.includes("akamaized.net") || trimmedUrl.includes(".m3u8") || trimmedUrl.includes("master.json"))) {
       downloadedRaw = trimmedUrl;
     } else {
       try {

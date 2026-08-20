@@ -61,10 +61,53 @@
     });
   }
 
+  // Extract Vimeo player stream from DOM or window.playerConfig
+  function extractVimeoStream(targetQuality) {
+    return new Promise((resolve) => {
+      // 1. Check direct video tag
+      const videoEl = document.querySelector("video");
+      if (videoEl && videoEl.src && videoEl.src.startsWith("http")) {
+        return resolve({ streamUrl: videoEl.src });
+      }
+
+      // 2. Check script tags for window.playerConfig
+      for (const script of document.scripts) {
+        if (script.textContent && (script.textContent.includes("playerConfig") || script.textContent.includes("window.vimeo"))) {
+          const match = script.textContent.match(/window\.playerConfig\s*=\s*({.+?});/) ||
+                        script.textContent.match(/config\s*=\s*({.+?});/);
+          if (match) {
+            try {
+              const data = JSON.parse(match[1]);
+              const files = data?.request?.files || {};
+              const progressive = files.progressive || [];
+              if (progressive.length > 0) {
+                progressive.sort((a, b) => (parseInt(b.quality) || b.height || 0) - (parseInt(a.quality) || a.height || 0));
+                const qNum = parseInt(targetQuality) || 1080;
+                const matched = progressive.find(p => (parseInt(p.quality) || p.height || 0) <= qNum) || progressive[0];
+                if (matched?.url) return resolve({ streamUrl: matched.url });
+              }
+              const hls = files.hls || {};
+              const defaultCdn = hls.default_cdn;
+              if (defaultCdn && hls.cdns && hls.cdns[defaultCdn]?.url) {
+                return resolve({ streamUrl: hls.cdns[defaultCdn].url });
+              }
+            } catch {}
+          }
+        }
+      }
+
+      resolve(null);
+    });
+  }
+
   // Listen for stream requests from popup
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "GET_DIRECT_STREAMS") {
       extractDirectStreams().then((res) => sendResponse(res));
+      return true;
+    }
+    if (request.action === "GET_VIMEO_STREAM") {
+      extractVimeoStream(request.targetQuality).then((res) => sendResponse(res));
       return true;
     }
   });

@@ -29,7 +29,9 @@
     {
       "matches": [
         "*://*.youtube.com/*",
-        "*://*.youtu.be/*"
+        "*://*.youtu.be/*",
+        "*://*.vimeo.com/*",
+        "*://player.vimeo.com/*"
       ],
       "js": ["content/content.js"],
       "css": ["content/content.css"],

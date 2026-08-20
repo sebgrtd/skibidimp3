@@ -540,6 +540,54 @@ async function getBrowserCookies(targetUrl = "") {
   }
 }
 
+// Fetch Vimeo direct stream URL directly from browser client session
+async function resolveVimeoDirectStream(targetUrl, targetQuality = "1080p") {
+  try {
+    const idMatch = targetUrl.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/[^\/]*\/videos\/|album\/(?:\d+\/)?video\/|video\/|)(\d+)/);
+    if (!idMatch) return null;
+    const vimeoId = idMatch[1];
+
+    // 1. Try querying active tab content script
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab && tab.id && (tab.url?.includes("vimeo.com") || tab.url?.includes("player.vimeo.com"))) {
+        const response = await chrome.tabs.sendMessage(tab.id, { action: "GET_VIMEO_STREAM", targetQuality });
+        if (response?.streamUrl) return response.streamUrl;
+      }
+    } catch {}
+
+    // 2. Direct client fetch with browser headers
+    const res = await fetch(`https://player.vimeo.com/video/${vimeoId}/config`, {
+      headers: {
+        "User-Agent": navigator.userAgent,
+        "Referer": "https://vimeo.com/",
+      },
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const files = data?.request?.files || {};
+      const progressive = files.progressive || [];
+
+      if (Array.isArray(progressive) && progressive.length > 0) {
+        progressive.sort((a, b) => (parseInt(b.quality) || b.height || 0) - (parseInt(a.quality) || a.height || 0));
+        const qNum = parseInt(targetQuality) || 1080;
+        const matched = progressive.find(p => (parseInt(p.quality) || p.height || 0) <= qNum) || progressive[0];
+        if (matched?.url) return matched.url;
+      }
+
+      const hls = files.hls || {};
+      const defaultCdn = hls.default_cdn;
+      if (defaultCdn && hls.cdns && hls.cdns[defaultCdn]?.url) {
+        return hls.cdns[defaultCdn].url;
+      }
+    }
+  } catch (err) {
+    console.warn("Could not extract Vimeo direct stream in browser:", err);
+  }
+  return null;
+}
+
 // Clean filename builder helper
 function buildSafeFilename(title, artist, format) {
   let cleanArtist = (artist || "").replace(/ - Topic$/, "").replace(/VEVO$/, "").trim();
@@ -616,8 +664,17 @@ async function handleDownload() {
 
     const youtubeCookies = await getBrowserCookies(url);
 
+    let downloadUrl = state.currentMedia?.originalUrl || state.currentMedia?.url || url;
+    if (url.includes("vimeo.com")) {
+      const directStream = await resolveVimeoDirectStream(url, bitrate);
+      if (directStream) {
+        console.log("Flux direct Vimeo résolu avec succès:", directStream);
+        downloadUrl = directStream;
+      }
+    }
+
     const payload = {
-      url: state.currentMedia?.originalUrl || state.currentMedia?.url || url,
+      url: downloadUrl,
       format,
       bitrate: isVideo ? bitrate : isImage ? "HD" : bitrate,
       quality: isVideo ? bitrate : undefined,
