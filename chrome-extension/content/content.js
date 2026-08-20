@@ -7,53 +7,37 @@
   // Load preferences from storage
   function loadPrefs() {
     chrome.storage.local.get({ showOverlay: true, showInPage: true }, (data) => {
-      userPrefs = data;
+      userPrefs = {
+        showOverlay: data.showOverlay !== false,
+        showInPage: data.showInPage !== false,
+      };
       checkAndInject();
     });
   }
 
   // Listen for preference changes from popup
   chrome.storage.onChanged.addListener((changes) => {
-    if (changes.showOverlay) userPrefs.showOverlay = changes.showOverlay.newValue;
-    if (changes.showInPage) userPrefs.showInPage = changes.showInPage.newValue;
+    if (changes.showOverlay) userPrefs.showOverlay = changes.showOverlay.newValue !== false;
+    if (changes.showInPage) userPrefs.showInPage = changes.showInPage.newValue !== false;
     checkAndInject();
   });
 
   loadPrefs();
 
   // -------------------------------------------------------------
-  // 1. Platform & Media Detection
+  // 1. Platform & Media Detection (Broad & Resilient)
   // -------------------------------------------------------------
   function detectMediaPage() {
-    const url = window.location.href;
-    const hostname = window.location.hostname;
-    const pathname = window.location.pathname;
+    const hostname = window.location.hostname.toLowerCase();
 
-    if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) {
-      if (url.includes("watch?v=") || pathname.includes("/shorts/")) return "youtube";
-    }
-    if (hostname.includes("spotify.com")) {
-      if (pathname.includes("/track/") || pathname.includes("/album/") || pathname.includes("/playlist/") || pathname.includes("/episode/")) return "spotify";
-    }
-    if (hostname.includes("soundcloud.com")) {
-      if (pathname.length > 3 && !pathname.startsWith("/discover") && !pathname.startsWith("/stream") && !pathname.startsWith("/upload")) return "soundcloud";
-    }
-    if (hostname.includes("tiktok.com")) {
-      if (pathname.includes("/video/") || pathname.includes("/v/") || pathname.includes("/t/") || pathname.includes("/@")) return "tiktok";
-    }
-    if (hostname.includes("instagram.com")) {
-      if (pathname.includes("/reel/") || pathname.includes("/p/") || pathname.includes("/tv/") || pathname.includes("/stories/")) return "instagram";
-    }
-    if (hostname.includes("twitter.com") || hostname.includes("x.com")) {
-      if (pathname.includes("/status/")) return "twitter";
-    }
-    if (hostname.includes("pinterest.com") || hostname.includes("pin.it")) {
-      if (pathname.includes("/pin/") || hostname.includes("pin.it")) return "pinterest";
-    }
-    if (hostname.includes("vimeo.com")) {
-      const isId = pathname.match(/\d{6,}/);
-      if (isId || hostname.includes("player.vimeo.com")) return "vimeo";
-    }
+    if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) return "youtube";
+    if (hostname.includes("spotify.com")) return "spotify";
+    if (hostname.includes("soundcloud.com")) return "soundcloud";
+    if (hostname.includes("tiktok.com")) return "tiktok";
+    if (hostname.includes("instagram.com")) return "instagram";
+    if (hostname.includes("twitter.com") || hostname.includes("x.com")) return "twitter";
+    if (hostname.includes("pinterest.") || hostname.includes("pin.it")) return "pinterest";
+    if (hostname.includes("vimeo.com")) return "vimeo";
 
     return null;
   }
@@ -63,7 +47,6 @@
   // -------------------------------------------------------------
   function extractDirectStreams() {
     return new Promise((resolve) => {
-      // 1. Try scanning script tags on YouTube
       for (const script of document.scripts) {
         if (script.textContent && script.textContent.includes("ytInitialPlayerResponse")) {
           const match = script.textContent.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
@@ -78,7 +61,6 @@
         }
       }
 
-      // 2. Inject script to read window.ytInitialPlayerResponse
       const script = document.createElement("script");
       const eventId = "skibidi_player_data_" + Math.random().toString(36).substring(2, 8);
       
@@ -118,10 +100,8 @@
     });
   }
 
-  // Extract Vimeo player stream from DOM or window.playerConfig (No partial range chunks!)
   function extractVimeoStream(targetQuality = "1080p") {
     return new Promise((resolve) => {
-      // 1. Check window.playerConfig (Authoritative progressive MP4s & HLS master)
       try {
         if (window.playerConfig && window.playerConfig.request && window.playerConfig.request.files) {
           const files = window.playerConfig.request.files;
@@ -140,7 +120,6 @@
         }
       } catch {}
 
-      // 2. Check performance resources for master manifests (Excluding range fragments)
       try {
         const entries = performance.getEntriesByType("resource");
         for (let i = entries.length - 1; i >= 0; i--) {
@@ -156,7 +135,6 @@
         }
       } catch {}
 
-      // 3. Check script tags for playerConfig
       for (const script of document.scripts) {
         if (script.textContent && (script.textContent.includes("playerConfig") || script.textContent.includes("window.vimeo"))) {
           const match = script.textContent.match(/window\.playerConfig\s*=\s*({.+?});/) ||
@@ -182,7 +160,6 @@
         }
       }
 
-      // 4. Check direct video tag (Only if not blob and not range)
       const videoEl = document.querySelector("video");
       if (videoEl && videoEl.src && videoEl.src.startsWith("http") && !videoEl.src.includes("&range=") && !videoEl.src.includes("/range/")) {
         return resolve({ streamUrl: videoEl.src });
@@ -192,7 +169,6 @@
     });
   }
 
-  // Listen for stream requests from popup
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "GET_DIRECT_STREAMS") {
       extractDirectStreams().then((res) => sendResponse(res));
@@ -224,12 +200,12 @@
     const formats = data.streamingData?.formats || [];
     const adaptiveFormats = data.streamingData?.adaptiveFormats || [];
 
-    let directMp4 = formats.find(f => f.itag === 22 && f.url); // 720p
-    if (!directMp4) directMp4 = formats.find(f => f.itag === 18 && f.url); // 360p
+    let directMp4 = formats.find(f => f.itag === 22 && f.url);
+    if (!directMp4) directMp4 = formats.find(f => f.itag === 18 && f.url);
     if (!directMp4) directMp4 = formats.find(f => f.url && f.mimeType && f.mimeType.includes("video/mp4"));
 
-    let directAudio = adaptiveFormats.find(f => f.itag === 140 && f.url); // 128k M4A
-    if (!directAudio) directAudio = adaptiveFormats.find(f => f.itag === 251 && f.url); // 160k WebM Opus
+    let directAudio = adaptiveFormats.find(f => f.itag === 140 && f.url);
+    if (!directAudio) directAudio = adaptiveFormats.find(f => f.itag === 251 && f.url);
     if (!directAudio) directAudio = adaptiveFormats.find(f => f.url && f.mimeType && f.mimeType.includes("audio/"));
 
     return {
@@ -336,16 +312,13 @@
       </div>
     `;
 
-    document.body.appendChild(overlay);
+    (document.body || document.documentElement).appendChild(overlay);
 
     const mainBtn = overlay.querySelector("#skibidi-overlay-btn");
     const dropdownToggle = overlay.querySelector("#skibidi-overlay-toggle");
     const closeBtn = overlay.querySelector("#skibidi-overlay-close");
     const menu = overlay.querySelector("#skibidi-overlay-menu");
 
-    // -------------------------------------------------------------
-    // Smooth Drag & Move Handler
-    // -------------------------------------------------------------
     let isDragging = false;
     let hasMoved = false;
     let startX = 0, startY = 0;
@@ -460,10 +433,10 @@
     }
 
     if (existing && existing.classList.contains(`skibidi-inpage-${platform}`)) {
-      return; // Already cleanly injected
+      return;
     }
 
-    // Platform-specific target selectors
+    // Comprehensive platform selectors
     const platformTargets = {
       youtube: [
         "#top-row #actions #top-level-buttons-computed",
@@ -477,6 +450,7 @@
         '[data-testid="track-detail"] [data-testid="action-bar-row"]',
         '.main-actionBar-ActionBarRow',
         '[data-testid="now-playing-widget"]',
+        '.Root__now-playing-bar',
       ],
       soundcloud: [
         '.soundActions .sc-button-group',
@@ -488,40 +462,56 @@
         '[data-e2e="browse-action-bar"]',
         '[data-e2e="feed-video-action-bar"]',
         '[data-e2e="video-author-container"]',
-        '.video-action-bar',
+        'div[class*="ActionBarWrapper"]',
+        'div[class*="VideoActionBar"]',
+        'div[class*="DivActionItemContainer"]',
+        'section:has(video)',
       ],
       instagram: [
         'article section:has(svg)',
         'article section',
         'div[role="presentation"] section',
         'section:has(svg[aria-label])',
+        'div[class*="x78zum5"]:has(svg)',
       ],
       twitter: [
         'article [role="group"]',
+        'div[data-testid="tweet"] [role="group"]',
         'div[role="group"][id*="id__"]',
+        'div[data-testid="cellInnerDiv"] article [role="group"]',
       ],
       pinterest: [
         '[data-test-id="pin-action-buttons"]',
         '[data-test-id="PinActionButtons"]',
+        '[data-test-id="closeup-action-bar"]',
         '[data-test-id="save-button"]',
+        'div[data-test-id*="action"]',
+        'div[data-test-id*="pin"] div:has(button)',
       ],
       vimeo: [
         'aside[aria-label="Actions"]',
         '[data-testid="video-actions"]',
-        '.video_actions',
+        'div[class*="video_actions"]',
+        'div[class*="Header_actions"]',
+        'div[class*="Layout_sidebar"]',
+        'div[class*="clip_info"]',
+        '.clip_info-subline',
         '#watch-header',
-        '.player-container',
+        '.player_container',
+        'div:has(> video)',
       ],
     };
 
     const selectors = platformTargets[platform] || [];
     let targetEl = null;
     for (const selector of selectors) {
-      const el = document.querySelector(selector);
-      if (el) {
-        targetEl = el;
-        break;
-      }
+      try {
+        const el = document.querySelector(selector);
+        if (el) {
+          targetEl = el;
+          break;
+        }
+      } catch {}
     }
 
     if (!targetEl) return;
@@ -612,7 +602,6 @@
     btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Préparation...</span>`;
 
     try {
-      // 1. YouTube direct client mode
       if (platform === "youtube" && (mode === "client-mp4" || mode === "client-audio")) {
         btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Flux direct...</span>`;
         const streams = await extractDirectStreams();
@@ -650,7 +639,6 @@
         }
       }
 
-      // 2. Vimeo Direct Stream Extraction
       let vimeoDirectStream = null;
       if (platform === "vimeo") {
         btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Flux Vimeo...</span>`;
@@ -660,7 +648,6 @@
         }
       }
 
-      // 3. Server VPS Download for all platforms
       btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Conversion...</span>`;
       const response = await chrome.runtime.sendMessage({
         action: "QUICK_DOWNLOAD_FROM_PAGE",
@@ -732,20 +719,30 @@
     }
   }
 
-  // Watch URL and DOM changes in Single Page Apps (YouTube, Spotify, Instagram, TikTok, etc.)
+  // Watch URL and DOM changes in Single Page Apps (TikTok, Twitter, Vimeo, Pinterest, Spotify, YouTube)
   let lastUrl = window.location.href;
   const urlObserver = new MutationObserver(() => {
     if (window.location.href !== lastUrl) {
       lastUrl = window.location.href;
-      setTimeout(checkAndInject, 500);
-      setTimeout(checkAndInject, 1500);
+      setTimeout(checkAndInject, 300);
+      setTimeout(checkAndInject, 1200);
+    } else {
+      checkAndInject();
     }
   });
-  urlObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
 
-  window.addEventListener("yt-navigate-finish", () => setTimeout(checkAndInject, 600));
-  window.addEventListener("popstate", () => setTimeout(checkAndInject, 500));
-  window.addEventListener("load", () => setTimeout(checkAndInject, 600));
+  if (document.body) {
+    urlObserver.observe(document.body, { childList: true, subtree: true });
+  } else {
+    document.addEventListener("DOMContentLoaded", () => {
+      urlObserver.observe(document.body, { childList: true, subtree: true });
+    });
+  }
 
-  setInterval(checkAndInject, 2000);
+  window.addEventListener("yt-navigate-finish", () => setTimeout(checkAndInject, 500));
+  window.addEventListener("popstate", () => setTimeout(checkAndInject, 300));
+  window.addEventListener("load", () => setTimeout(checkAndInject, 500));
+  document.addEventListener("DOMContentLoaded", () => setTimeout(checkAndInject, 300));
+
+  setInterval(checkAndInject, 1500);
 })();
