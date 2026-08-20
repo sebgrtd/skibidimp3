@@ -192,15 +192,34 @@ function selectMode(mode) {
       elements.formatSelect.appendChild(opt);
     });
 
+    // Populate audio bitrates
+    elements.bitrateContainer.querySelector("label").textContent = "Qualité / Bitrate";
+    elements.bitrateSelect.innerHTML = `
+      <option value="320k" selected>320 kbps (Max)</option>
+      <option value="256k">256 kbps</option>
+      <option value="192k">192 kbps</option>
+      <option value="128k">128 kbps</option>
+    `;
+
     const isPrefAudio = ["mp3", "flac", "wav", "m4a"].includes(state.defaultFormat);
     elements.formatSelect.value = isPrefAudio ? state.defaultFormat : "mp3";
     elements.boostContainer.style.display = "flex";
   } else if (mode === "video") {
     const opt = document.createElement("option");
     opt.value = "mp4";
-    opt.textContent = "MP4 (Vidéo HD 1080p / 720p)";
+    opt.textContent = "MP4 (Vidéo Universelle)";
     elements.formatSelect.appendChild(opt);
     elements.boostContainer.style.display = "none";
+
+    // Populate video resolutions
+    elements.bitrateContainer.querySelector("label").textContent = "Résolution Vidéo";
+    elements.bitrateSelect.innerHTML = `
+      <option value="1080p" selected>1080p (Full HD)</option>
+      <option value="720p">720p (HD)</option>
+      <option value="480p">480p (SD)</option>
+      <option value="360p">360p (Léger)</option>
+      <option value="best">Max (4K / 2K)</option>
+    `;
   } else if (mode === "gif") {
     const opt = document.createElement("option");
     opt.value = "gif";
@@ -238,10 +257,11 @@ function updateFormatUI() {
     const bit = elements.bitrateSelect.value;
     elements.downloadBtn.querySelector(".btn-text").textContent = `Télécharger en ${format.toUpperCase()} (${bit})`;
   } else if (mode === "video") {
-    elements.bitrateContainer.style.display = "none";
-    elements.optionsGrid.className = "options-grid single-col";
+    elements.bitrateContainer.style.display = "flex";
+    elements.optionsGrid.className = "options-grid";
     elements.boostContainer.style.display = "none";
-    elements.downloadBtn.querySelector(".btn-text").textContent = "Télécharger la Vidéo (MP4 HD)";
+    const res = elements.bitrateSelect.value;
+    elements.downloadBtn.querySelector(".btn-text").textContent = `Télécharger la Vidéo (${res})`;
   } else if (mode === "gif") {
     elements.bitrateContainer.style.display = "none";
     elements.optionsGrid.className = "options-grid single-col";
@@ -591,7 +611,8 @@ async function handleDownload() {
     const payload = {
       url: state.currentMedia?.originalUrl || state.currentMedia?.url || url,
       format,
-      bitrate: isVideo ? "1080p" : isImage ? "HD" : bitrate,
+      bitrate: isVideo ? bitrate : isImage ? "HD" : bitrate,
+      quality: isVideo ? bitrate : undefined,
       boost,
       editTitle,
       editArtist,
@@ -643,7 +664,7 @@ async function handleDownload() {
       artist: editArtist,
       thumbnail: state.currentMedia?.thumbnail || thumbnail,
       format,
-      bitrate: isVideo ? "1080p" : isImage ? "HD" : bitrate,
+      bitrate: isVideo ? (bitrate === "best" ? "Max" : bitrate) : isImage ? "HD" : bitrate,
       url: state.currentMedia?.originalUrl || state.currentMedia?.url || url,
       date: new Date().toLocaleDateString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
       synced: Boolean(state.authToken),

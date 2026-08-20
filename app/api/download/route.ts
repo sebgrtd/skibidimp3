@@ -27,10 +27,21 @@ async function singleAttemptDownload(
   extraFlags: string[],
   userAgent: string,
   isVideo: boolean = false,
-  customCookieFile?: string
+  customCookieFile?: string,
+  videoQuality?: string
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    const formatArg = isVideo ? ["-f", "bv*+ba/b", "--merge-output-format", "mp4"] : ["-f", "ba/b", "-x"];
+    let videoFormatSelector = "bv*+ba/b";
+    if (videoQuality) {
+      const qNum = parseInt(String(videoQuality).replace(/[^0-9]/g, ""), 10);
+      if (qNum > 0) {
+        videoFormatSelector = `bv*[height<=${qNum}]+ba/b[height<=${qNum}]/bv*+ba/b`;
+      } else if (videoQuality === "best") {
+        videoFormatSelector = "bv*+ba/b";
+      }
+    }
+
+    const formatArg = isVideo ? ["-f", videoFormatSelector, "--merge-output-format", "mp4"] : ["-f", "ba/b", "-x"];
     const cookieArgs: string[] = [];
     if (customCookieFile && fs.existsSync(customCookieFile)) {
       cookieArgs.push("--cookies", customCookieFile);
@@ -76,7 +87,13 @@ async function singleAttemptDownload(
   });
 }
 
-async function extractMediaStream(downloadUrl: string, rawTemplateBase: string, isVideo: boolean = false, customCookieFile?: string): Promise<string> {
+async function extractMediaStream(
+  downloadUrl: string,
+  rawTemplateBase: string,
+  isVideo: boolean = false,
+  customCookieFile?: string,
+  videoQuality?: string
+): Promise<string> {
   const isModule = PYTHON_PATH.includes("python");
   const ytDlpCommand = isModule ? PYTHON_PATH : "yt-dlp";
   const ytDlpBaseArgs = isModule ? ["-m", "yt_dlp"] : [];
@@ -87,7 +104,7 @@ async function extractMediaStream(downloadUrl: string, rawTemplateBase: string, 
 
   const attempt = async (suffix: string, flags: string[]) => {
     const tpl = path.join(baseDir, `${baseName}_${suffix}.%(ext)s`);
-    return singleAttemptDownload(ytDlpCommand, ytDlpBaseArgs, downloadUrl, tpl, flags, USER_AGENT, isVideo, customCookieFile);
+    return singleAttemptDownload(ytDlpCommand, ytDlpBaseArgs, downloadUrl, tpl, flags, USER_AGENT, isVideo, customCookieFile, videoQuality);
   };
 
   const hasCookies = Boolean((customCookieFile && fs.existsSync(customCookieFile)) || fs.existsSync(COOKIES_FILE) || fs.existsSync(ALT_COOKIES));
@@ -167,6 +184,8 @@ export async function POST(req: NextRequest) {
       url,
       format = "mp3",
       bitrate = "320k",
+      quality,
+      videoQuality,
       startTime,
       endTime,
       volumeBoost = "1.0",
@@ -283,6 +302,8 @@ export async function POST(req: NextRequest) {
       const rawPattern = `raw_vid_${uniqueId}`;
       const rawTemplate = path.join(os.tmpdir(), `${rawPattern}.%(ext)s`);
 
+      const targetVideoQuality = quality || videoQuality || (bitrate?.includes("p") ? bitrate : "1080p");
+
       let downloadedRaw = "";
       // If direct video url or HLS stream passed (e.g. from Vimeo / Twitter / Pinterest)
       if (trimmedUrl.startsWith("http") && (trimmedUrl.includes("vimeocdn.com") || trimmedUrl.includes(".m3u8"))) {
@@ -295,7 +316,7 @@ export async function POST(req: NextRequest) {
         downloadedRaw = directPath;
         tmpFiles.push(downloadedRaw);
       } else {
-        downloadedRaw = await extractMediaStream(trimmedUrl, rawTemplate, true, customCookiePath);
+        downloadedRaw = await extractMediaStream(trimmedUrl, rawTemplate, true, customCookiePath, targetVideoQuality);
         tmpFiles.push(downloadedRaw);
       }
 

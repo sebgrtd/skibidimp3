@@ -60,6 +60,7 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
   // Settings
   const [format, setFormat] = useState("mp3");
   const [bitrate, setBitrate] = useState("320k");
+  const [videoQuality, setVideoQuality] = useState("1080p");
   const [startTime, setStartTime] = useState("0");
   const [endTime, setEndTime] = useState("0");
   const [volumeBoost, setVolumeBoost] = useState("1.0");
@@ -99,12 +100,8 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
         throw new Error((data as any).error || "Erreur lors de la récupération des données.");
       }
 
-      if (data.isPlaylist) {
-        if (onPlaylistDetected) {
-          onPlaylistDetected(data);
-        } else {
-          setMediaInfo(data);
-        }
+      if (data.isPlaylist && onPlaylistDetected) {
+        onPlaylistDetected(data);
       } else {
         setMediaInfo(data);
         setEditTitle(data.title || "");
@@ -157,7 +154,7 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
       isImage 
         ? "Récupération de l'image haute définition..." 
         : isVideo 
-          ? "Extraction du flux vidéo HD (1080p)..." 
+          ? `Extraction du flux vidéo ${videoQuality}...` 
           : isGif 
             ? "Génération du GIF animé..." 
             : "Connexion au flux audio HD..."
@@ -166,7 +163,7 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
     const progressInterval = setInterval(() => {
       setDownloadPercent((prev) => {
         if (prev < 30) {
-          setDownloadProgress(isImage ? "Traitement image..." : isVideo ? "Téléchargement flux vidéo..." : "Connexion flux source...");
+          setDownloadProgress(isImage ? "Traitement image..." : isVideo ? `Téléchargement flux vidéo ${videoQuality}...` : "Connexion flux source...");
           return prev + (isImage ? 25 : 5);
         } else if (prev < 75) {
           setDownloadProgress(isImage ? "Finalisation PNG..." : isVideo ? "Encodage vidéo MP4..." : "Conversion 320kbps...");
@@ -181,11 +178,12 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
 
     try {
       const payload = {
-        url: mediaInfo.originalUrl || mediaInfo.url || url,
+        url: mediaInfo.originalUrl || mediaInfo.url,
         format,
-        bitrate,
-        startTime: Number(startTime) > 0 ? startTime : undefined,
-        endTime: Number(endTime) > 0 && Number(endTime) < (mediaInfo.duration || 99999) ? endTime : undefined,
+        bitrate: isVideo ? videoQuality : bitrate,
+        quality: isVideo ? videoQuality : bitrate,
+        startTime,
+        endTime,
         volumeBoost,
         normalize,
         metadata: {
@@ -236,7 +234,7 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
         artist: editArtist || mediaInfo.artist,
         thumbnail: mediaInfo.thumbnail,
         format,
-        bitrate: isVideo ? "1080p" : isImage ? "HD" : bitrate,
+        bitrate: isVideo ? (videoQuality === "best" ? "Max" : videoQuality) : isImage ? "HD" : bitrate,
         date: new Date().toLocaleDateString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
         url: mediaInfo.originalUrl || mediaInfo.url,
       };
@@ -468,6 +466,35 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
                 )}
               </div>
 
+              {/* Video Resolution Switcher */}
+              {selectedMode === "video" && (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                  <span className="text-[11px] font-semibold text-zinc-400 pl-1">Qualité Vidéo :</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[
+                      { id: "1080p", label: "1080p Full HD" },
+                      { id: "720p", label: "720p HD" },
+                      { id: "480p", label: "480p SD" },
+                      { id: "360p", label: "360p Léger" },
+                      { id: "best", label: "Qualité Max" },
+                    ].map((q) => (
+                      <button
+                        key={q.id}
+                        type="button"
+                        onClick={() => setVideoQuality(q.id)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                          videoQuality === q.id
+                            ? "bg-emerald-600 text-white shadow-sm"
+                            : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                        }`}
+                      >
+                        {q.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="pt-1 flex flex-col sm:flex-row gap-2.5 items-center">
                 <button
@@ -485,7 +512,7 @@ export default function ConverterForm({ onPlaylistDetected, onAddToHistory }: Co
                       <Download className="h-4 w-4" />
                       <span>
                         Télécharger en {format.toUpperCase()}
-                        {selectedMode === "audio" ? ` (${bitrate})` : selectedMode === "video" ? " (HD)" : ""}
+                        {selectedMode === "audio" ? ` (${bitrate})` : selectedMode === "video" ? ` (${videoQuality === "best" ? "Max" : videoQuality})` : ""}
                       </span>
                     </>
                   )}
