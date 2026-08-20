@@ -1,4 +1,4 @@
-// SkibidiMP3 - Background Service Worker (Direct Client + VPS Support)
+// SkibidiMP3 - Background Service Worker (Precise Filename & Direct Download)
 
 const DEFAULT_SERVER_URL = "http://localhost:3030";
 
@@ -24,7 +24,7 @@ function notify(title, message, isError = false) {
     chrome.notifications.create({
       type: "basic",
       iconUrl: chrome.runtime.getURL("icons/icon128.png"),
-      title: (isError ? "❌ " : "⚡ ") + title,
+      title: (isError ? "Erreur : " : "SkibidiMP3 : ") + title,
       message: message || "",
       priority: 2,
     });
@@ -33,9 +33,22 @@ function notify(title, message, isError = false) {
   }
 }
 
+function buildSafeFilename(title, artist, format) {
+  let cleanArtist = (artist || "").replace(/ - Topic$/, "").replace(/VEVO$/, "").trim();
+  let cleanTitle = (title || "Musique").trim();
+
+  // If title already starts with "Artist - Title", avoid duplicate "Artist - Artist - Title"
+  if (cleanArtist && cleanTitle.toLowerCase().startsWith(cleanArtist.toLowerCase() + " - ")) {
+    cleanTitle = cleanTitle.substring(cleanArtist.length + 3).trim();
+  }
+
+  let filename = cleanArtist ? `${cleanArtist} - ${cleanTitle}.${format}` : `${cleanTitle}.${format}`;
+  return filename.replace(/[\\/:*?"<>|]/g, "_").trim();
+}
+
 // Message Listener
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  // 1. Direct Client Download (Zero-VPS, streams directly from YouTube CDN)
+  // 1. Direct Client Download (Zero-VPS)
   if (request.action === "DIRECT_CLIENT_DOWNLOAD") {
     handleDirectClientDownload(request)
       .then((res) => sendResponse({ success: true, ...res }))
@@ -80,18 +93,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Direct Client-Side Download Handler
 async function handleDirectClientDownload(data) {
   const { streamUrl, title, artist, format = "mp4", bitrate = "720p", thumbnail, originalUrl } = data;
-  const cleanArtist = (artist || "").trim();
-  const cleanTitle = (title || "Video").trim();
-  const filename = cleanArtist ? `${cleanArtist} - ${cleanTitle}.${format}` : `${cleanTitle}.${format}`;
-  const safeFilename = filename.replace(/[\\/:*?"<>|]/g, "_");
+  const safeFilename = buildSafeFilename(title, artist, format);
 
-  notify("Téléchargement Direct Lancé", `« ${cleanTitle} » (${format.toUpperCase()} ${bitrate})`);
+  notify("Téléchargement lancé", `${safeFilename}`);
 
-  await chrome.downloads.download({
-    url: streamUrl,
-    filename: safeFilename,
-    saveAs: false,
-  });
+  try {
+    // Fetch stream as blob to force custom filename (preventing videoplayback default from google servers)
+    const res = await fetch(streamUrl);
+    if (res.ok) {
+      const blob = await res.blob();
+      const reader = new FileReader();
+      const dataUrl = await new Promise((resolve, reject) => {
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      await chrome.downloads.download({
+        url: dataUrl,
+        filename: safeFilename,
+        saveAs: false,
+      });
+    } else {
+      await chrome.downloads.download({
+        url: streamUrl,
+        filename: safeFilename,
+        saveAs: false,
+      });
+    }
+  } catch {
+    await chrome.downloads.download({
+      url: streamUrl,
+      filename: safeFilename,
+      saveAs: false,
+    });
+  }
 
   // Sync to history if authenticated
   const settings = await getSettings();
@@ -105,8 +141,8 @@ async function handleDirectClientDownload(data) {
           "Authorization": `Bearer ${settings.authToken}`,
         },
         body: JSON.stringify({
-          title: cleanTitle,
-          artist: cleanArtist,
+          title,
+          artist,
           thumbnail,
           format,
           bitrate,
@@ -118,7 +154,7 @@ async function handleDirectClientDownload(data) {
     }
   }
 
-  return { title: cleanTitle, artist: cleanArtist, filename: safeFilename };
+  return { title, artist, filename: safeFilename };
 }
 
 // Server-Side Transcode Download Handler
@@ -184,10 +220,7 @@ async function handleQuickDownload(url, customOptions = {}) {
     reader.readAsDataURL(blob);
   });
 
-  const cleanArtist = artist.trim();
-  const cleanTitle = title.trim();
-  const filename = cleanArtist ? `${cleanArtist} - ${cleanTitle}.${format}` : `${cleanTitle}.${format}`;
-  const safeFilename = filename.replace(/[\\/:*?"<>|]/g, "_");
+  const safeFilename = buildSafeFilename(title, artist, format);
 
   await chrome.downloads.download({
     url: dataUrl,
@@ -218,6 +251,6 @@ async function handleQuickDownload(url, customOptions = {}) {
     }
   }
 
-  notify("Téléchargement prêt !", `« ${cleanTitle} » a été téléchargé avec succès.`);
+  notify("Téléchargement terminé", `« ${safeFilename} »`);
   return { title, artist, filename: safeFilename };
 }

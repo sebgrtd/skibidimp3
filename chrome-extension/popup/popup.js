@@ -1,4 +1,4 @@
-// SkibidiMP3 - Popup Script (Refined Minimalist UI)
+// SkibidiMP3 - Popup Script (Robust Thumbnail & Clean Filename Support)
 
 const DEFAULT_SERVER_URL = "http://localhost:3030";
 
@@ -15,16 +15,13 @@ let state = {
 
 // DOM Elements
 const elements = {
-  // Tabs
   navTabs: document.querySelectorAll(".nav-tab"),
   tabPanes: document.querySelectorAll(".tab-pane"),
   
-  // Auth Header Badge
   authBadge: document.getElementById("auth-status-badge"),
   authStatusDot: document.querySelector("#auth-status-badge .status-dot"),
   authStatusText: document.getElementById("auth-status-text"),
 
-  // Converter Tab
   urlInput: document.getElementById("url-input"),
   fetchInfoBtn: document.getElementById("fetch-info-btn"),
   mediaCard: document.getElementById("media-card"),
@@ -46,13 +43,11 @@ const elements = {
   progressLabel: document.getElementById("progress-label"),
   statusMessage: document.getElementById("status-message"),
 
-  // History Tab
   historyList: document.getElementById("history-list"),
   historySearch: document.getElementById("history-search"),
   historyRefreshBtn: document.getElementById("history-refresh-btn"),
   historyClearBtn: document.getElementById("history-clear-btn"),
 
-  // Settings Tab
   serverUrlInput: document.getElementById("server-url-input"),
   saveServerBtn: document.getElementById("save-server-btn"),
   quickServerBtns: document.querySelectorAll(".quick-servers .badge-btn"),
@@ -71,24 +66,10 @@ const elements = {
 document.addEventListener("DOMContentLoaded", async () => {
   setupTabs();
   setupEventListeners();
-  setupThumbnailErrorFallback();
   await loadStoredSettings();
   await checkAuthStatus();
   await detectActiveTabUrl();
 });
-
-function setupThumbnailErrorFallback() {
-  if (elements.mediaThumb) {
-    elements.mediaThumb.addEventListener("error", () => {
-      elements.mediaThumb.style.display = "none";
-      if (elements.mediaThumbFallback) elements.mediaThumbFallback.classList.remove("hidden");
-    });
-    elements.mediaThumb.addEventListener("load", () => {
-      elements.mediaThumb.style.display = "block";
-      if (elements.mediaThumbFallback) elements.mediaThumbFallback.classList.add("hidden");
-    });
-  }
-}
 
 // Load settings from chrome.storage
 async function loadStoredSettings() {
@@ -236,14 +217,20 @@ async function fetchMediaInfo(url) {
     const data = await res.json();
     state.currentMedia = data;
 
-    // Populate UI
+    // Handle thumbnail display with onload/onerror
     if (data.thumbnail) {
-      elements.mediaThumb.style.display = "block";
-      if (elements.mediaThumbFallback) elements.mediaThumbFallback.classList.add("hidden");
+      elements.mediaThumb.onload = () => {
+        elements.mediaThumb.classList.remove("hidden");
+        elements.mediaThumbFallback.classList.add("hidden");
+      };
+      elements.mediaThumb.onerror = () => {
+        elements.mediaThumb.classList.add("hidden");
+        elements.mediaThumbFallback.classList.remove("hidden");
+      };
       elements.mediaThumb.src = data.thumbnail;
     } else {
-      elements.mediaThumb.style.display = "none";
-      if (elements.mediaThumbFallback) elements.mediaThumbFallback.classList.remove("hidden");
+      elements.mediaThumb.classList.add("hidden");
+      elements.mediaThumbFallback.classList.remove("hidden");
     }
 
     elements.mediaTitleDisplay.textContent = data.title || "Titre inconnu";
@@ -287,6 +274,20 @@ function updateFormatUI() {
   elements.downloadBtn.querySelector(".btn-text").textContent = isVideo 
     ? "Télécharger la Vidéo (MP4)" 
     : `Télécharger en ${format.toUpperCase()}`;
+}
+
+// Clean filename builder helper
+function buildSafeFilename(title, artist, format) {
+  let cleanArtist = (artist || "").replace(/ - Topic$/, "").replace(/VEVO$/, "").trim();
+  let cleanTitle = (title || "Musique").trim();
+
+  // If title already has "Artist - Title", avoid duplicate "Artist - Artist - Title"
+  if (cleanArtist && cleanTitle.toLowerCase().startsWith(cleanArtist.toLowerCase() + " - ")) {
+    cleanTitle = cleanTitle.substring(cleanArtist.length + 3).trim();
+  }
+
+  let filename = cleanArtist ? `${cleanArtist} - ${cleanTitle}.${format}` : `${cleanTitle}.${format}`;
+  return filename.replace(/[\\/:*?"<>|]/g, "_").trim();
 }
 
 // Download Handler
@@ -360,10 +361,7 @@ async function handleDownload() {
       reader.readAsDataURL(blob);
     });
 
-    const cleanArtist = editArtist.trim();
-    const cleanTitle = editTitle.trim();
-    const filename = cleanArtist ? `${cleanArtist} - ${cleanTitle}.${format}` : `${cleanTitle}.${format}`;
-    const safeFilename = filename.replace(/[\\/:*?"<>|]/g, "_");
+    const safeFilename = buildSafeFilename(editTitle, editArtist, format);
 
     await chrome.downloads.download({
       url: dataUrl,
@@ -381,8 +379,8 @@ async function handleDownload() {
             "Authorization": `Bearer ${state.authToken}`,
           },
           body: JSON.stringify({
-            title: cleanTitle,
-            artist: cleanArtist,
+            title: editTitle,
+            artist: editArtist,
             thumbnail: state.currentMedia?.thumbnail,
             format,
             bitrate: format === "mp4" ? "1080p" : bitrate,
@@ -394,7 +392,7 @@ async function handleDownload() {
       }
     }
 
-    showStatus(`« ${cleanTitle} » téléchargé avec succès !`, "success");
+    showStatus(`« ${editTitle} » téléchargé avec succès !`, "success");
   } catch (err) {
     clearInterval(interval);
     showStatus(err.message || "Erreur lors du téléchargement.", "error");

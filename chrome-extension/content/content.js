@@ -1,10 +1,9 @@
-// SkibidiMP3 - YouTube Content Script (Refined DA & Proactive Media Detection)
+// SkibidiMP3 - YouTube Content Script (Precise Title Extraction & Proactive Detection)
 
 (() => {
   let isConverting = false;
   let lastNotifiedUrl = "";
 
-  // Injected helper to extract ytInitialPlayerResponse from page context
   function extractDirectStreams() {
     return new Promise((resolve) => {
       // 1. Try scanning script tags on the page
@@ -63,13 +62,25 @@
   }
 
   function processStreamingData(data) {
-    if (!data || !data.streamingData) return null;
-    const title = data.videoDetails?.title || document.title.replace(/ - YouTube$/, "");
-    const artist = data.videoDetails?.author || "YouTube";
-    const thumbnail = data.videoDetails?.thumbnail?.thumbnails?.pop()?.url || null;
+    if (!data) return null;
 
-    const formats = data.streamingData.formats || [];
-    const adaptiveFormats = data.streamingData.adaptiveFormats || [];
+    // Extract cleanest title and artist from DOM / player
+    let title = document.querySelector("h1.ytd-watch-metadata yt-formatted-string")?.textContent
+      || document.querySelector("h1.title")?.textContent
+      || data.videoDetails?.title
+      || document.title.replace(/ - YouTube$/, "").trim();
+
+    let artist = document.querySelector("#channel-name #text")?.textContent
+      || document.querySelector("#owner-name #text")?.textContent
+      || data.videoDetails?.author
+      || "YouTube";
+
+    artist = artist.replace(/ - Topic$/, "").replace(/VEVO$/, "").trim();
+    title = title.trim();
+
+    const thumbnail = data.videoDetails?.thumbnail?.thumbnails?.pop()?.url || null;
+    const formats = data.streamingData?.formats || [];
+    const adaptiveFormats = data.streamingData?.adaptiveFormats || [];
 
     // Find best direct progressive MP4
     let directMp4 = formats.find(f => f.itag === 22 && f.url); // 720p
@@ -183,7 +194,6 @@
     return container;
   }
 
-  // Floating Toast on media detection
   function showDetectionToast() {
     const currentUrl = window.location.href;
     if (lastNotifiedUrl === currentUrl) return;
@@ -223,7 +233,6 @@
 
     document.body.appendChild(toast);
 
-    // Auto-remove after 6s
     setTimeout(() => {
       if (document.getElementById("skibidi-floating-toast") === toast) {
         toast.remove();
