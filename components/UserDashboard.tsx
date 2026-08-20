@@ -47,8 +47,37 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
   
   // Search, Filter & Sort states
   const [searchQuery, setSearchQuery] = useState("");
+  const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [formatFilter, setFormatFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("date_desc");
+
+  // Platform detection helper
+  const detectPlatform = (rawUrl: string = "") => {
+    const l = rawUrl.toLowerCase();
+    if (l.includes("spotify.com") || l.includes("open.spotify")) return "spotify";
+    if (l.includes("youtube.com") || l.includes("youtu.be")) return "youtube";
+    if (l.includes("soundcloud.com")) return "soundcloud";
+    if (l.includes("twitter.com") || l.includes("x.com") || l.includes("t.co")) return "twitter";
+    if (l.includes("tiktok.com")) return "tiktok";
+    if (l.includes("instagram.com")) return "instagram";
+    if (l.includes("pinterest.com") || l.includes("pin.it")) return "pinterest";
+    if (l.includes("vimeo.com")) return "vimeo";
+    return "other";
+  };
+
+  const getPlatformBadge = (p: string) => {
+    switch (p) {
+      case "youtube": return <span className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400">YouTube</span>;
+      case "spotify": return <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">Spotify</span>;
+      case "soundcloud": return <span className="inline-flex items-center gap-1 rounded-md border border-orange-500/30 bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-400">SoundCloud</span>;
+      case "twitter": return <span className="inline-flex items-center gap-1 rounded-md border border-zinc-500/30 bg-zinc-500/10 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">𝕏 Twitter</span>;
+      case "tiktok": return <span className="inline-flex items-center gap-1 rounded-md border border-pink-500/30 bg-pink-500/10 px-1.5 py-0.5 text-[10px] font-medium text-pink-400">TikTok</span>;
+      case "instagram": return <span className="inline-flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-medium text-rose-400">Instagram</span>;
+      case "pinterest": return <span className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-300">Pinterest</span>;
+      case "vimeo": return <span className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-400">Vimeo</span>;
+      default: return <span className="inline-flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">Web</span>;
+    }
+  };
 
   // Modals state
   const [deleteSingleItem, setDeleteSingleItem] = useState<SyncedHistoryItem | null>(null);
@@ -70,7 +99,12 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
         formatFilter === "all" ||
         (item.format && item.format.toLowerCase() === formatFilter.toLowerCase());
 
-      return matchSearch && matchFormat;
+      const itemPlatform = detectPlatform(item.url);
+      const matchPlatform =
+        platformFilter === "all" ||
+        (platformFilter === "other" ? itemPlatform === "other" : itemPlatform === platformFilter);
+
+      return matchSearch && matchFormat && matchPlatform;
     });
 
     result.sort((a, b) => {
@@ -482,7 +516,7 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
           {history.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-1">
               {/* Search Bar */}
-              <div className="sm:col-span-6 relative">
+              <div className="sm:col-span-4 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                 <input
                   type="text"
@@ -501,19 +535,40 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
                 )}
               </div>
 
-              {/* Format Filter */}
+              {/* Platform Filter */}
               <div className="sm:col-span-3">
+                <select
+                  value={platformFilter}
+                  onChange={(e) => setPlatformFilter(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-xl border border-zinc-800 bg-zinc-950 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer"
+                >
+                  <option value="all">🌐 Tous les sites</option>
+                  <option value="youtube">🔴 YouTube</option>
+                  <option value="spotify">🟢 Spotify</option>
+                  <option value="soundcloud">🟠 SoundCloud</option>
+                  <option value="twitter">𝕏 Twitter / X</option>
+                  <option value="tiktok">🎵 TikTok</option>
+                  <option value="instagram">📸 Instagram</option>
+                  <option value="pinterest">📌 Pinterest</option>
+                  <option value="vimeo">🔵 Vimeo</option>
+                  <option value="other">📎 Autre / Direct</option>
+                </select>
+              </div>
+
+              {/* Format Filter */}
+              <div className="sm:col-span-2">
                 <select
                   value={formatFilter}
                   onChange={(e) => setFormatFilter(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-xl border border-zinc-800 bg-zinc-950 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer"
                 >
-                  <option value="all">Tous les formats</option>
-                  <option value="mp3">MP3 uniquement</option>
+                  <option value="all">Tous formats</option>
+                  <option value="mp3">MP3</option>
                   <option value="mp4">MP4 (Vidéo)</option>
-                  <option value="flac">FLAC (Lossless)</option>
+                  <option value="flac">FLAC</option>
                   <option value="wav">WAV</option>
                   <option value="m4a">M4A</option>
+                  <option value="gif">GIF</option>
                 </select>
               </div>
 
@@ -551,6 +606,7 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
             <button
               onClick={() => {
                 setSearchQuery("");
+                setPlatformFilter("all");
                 setFormatFilter("all");
               }}
               className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 underline"
@@ -564,6 +620,7 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
               const isSelected = selectedIds.includes(item.id);
               const isDownloadingThis = downloadingSingleId === item.id;
               const progress = singleProgress[item.id];
+              const platform = detectPlatform(item.url);
 
               return (
                 <div
@@ -596,7 +653,7 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="text-xs sm:text-sm font-semibold text-zinc-100 truncate">{item.title}</h4>
                         {isDownloadingThis && progress && (
                           <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-mono font-bold text-emerald-400 shrink-0 animate-pulse">
@@ -608,6 +665,8 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
                     </div>
 
                     <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                      {getPlatformBadge(platform)}
+
                       <span className="hidden sm:inline-block rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-[10px] font-mono text-zinc-400">
                         {item.format.toUpperCase()} {item.bitrate}
                       </span>
