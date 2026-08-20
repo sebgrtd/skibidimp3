@@ -547,41 +547,77 @@ async function resolveVimeoDirectStream(targetUrl, targetQuality = "1080p") {
     if (!idMatch) return null;
     const vimeoId = idMatch[1];
 
-    // 1. Try querying active tab content script
+    // 1. First Priority: Extract directly from the active tab execution context (100% reliable)
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab && tab.id && (tab.url?.includes("vimeo.com") || tab.url?.includes("player.vimeo.com"))) {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          world: "MAIN",
+          func: (qStr) => {
+            // A. Check performance resources for CDN streams
+            try {
+              const entries = performance.getEntriesByType("resource");
+              for (let i = entries.length - 1; i >= 0; i--) {
+                const u = entries[i].name;
+                if (u && (u.includes("vimeocdn.com") || u.includes("akamaized.net")) && (u.includes(".m3u8") || u.includes("master.json") || u.includes(".mp4"))) {
+                  return u;
+                }
+              }
+            } catch {}
+
+            // B. Check video element src
+            const v = document.querySelector("video");
+            if (v && v.src && v.src.startsWith("http")) return v.src;
+
+            // C. Check window.playerConfig
+            if (window.playerConfig && window.playerConfig.request && window.playerConfig.request.files) {
+              const files = window.playerConfig.request.files;
+              const progressive = files.progressive || [];
+              if (progressive.length > 0) {
+                const qNum = parseInt(qStr) || 1080;
+                progressive.sort((a, b) => (parseInt(b.quality) || b.height || 0) - (parseInt(a.quality) || a.height || 0));
+                const matched = progressive.find(p => (parseInt(p.quality) || p.height || 0) <= qNum) || progressive[0];
+                if (matched?.url) return matched.url;
+              }
+              const hls = files.hls || {};
+              const defaultCdn = hls.default_cdn;
+              if (defaultCdn && hls.cdns && hls.cdns[defaultCdn]?.url) {
+                return hls.cdns[defaultCdn].url;
+              }
+            }
+
+            // D. Check scripts for master.json or m3u8 URLs
+            for (const s of document.scripts) {
+              if (s.textContent && (s.textContent.includes(".m3u8") || s.textContent.includes("vimeocdn.com"))) {
+                const m = s.textContent.match(/https:\/\/[^"'\s]+\.vimeocdn\.com[^"'\s]+(?:master\.json|\.m3u8|\.mp4)[^"'\s]*/);
+                if (m) return m[0];
+              }
+            }
+
+            return null;
+          },
+          args: [targetQuality],
+        });
+
+        if (results && results[0] && results[0].result) {
+          console.log("Flux Vimeo direct extrait depuis l'onglet actif:", results[0].result);
+          return results[0].result;
+        }
+      }
+    } catch (e) {
+      console.warn("Direct tab script execution failed:", e);
+    }
+
+    // 2. Query content script as fallback
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab && tab.id) {
         const response = await chrome.tabs.sendMessage(tab.id, { action: "GET_VIMEO_STREAM", targetQuality });
         if (response?.streamUrl) return response.streamUrl;
       }
     } catch {}
 
-    // 2. Direct client fetch with browser headers
-    const res = await fetch(`https://player.vimeo.com/video/${vimeoId}/config`, {
-      headers: {
-        "User-Agent": navigator.userAgent,
-        "Referer": "https://vimeo.com/",
-      },
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const files = data?.request?.files || {};
-      const progressive = files.progressive || [];
-
-      if (Array.isArray(progressive) && progressive.length > 0) {
-        progressive.sort((a, b) => (parseInt(b.quality) || b.height || 0) - (parseInt(a.quality) || a.height || 0));
-        const qNum = parseInt(targetQuality) || 1080;
-        const matched = progressive.find(p => (parseInt(p.quality) || p.height || 0) <= qNum) || progressive[0];
-        if (matched?.url) return matched.url;
-      }
-
-      const hls = files.hls || {};
-      const defaultCdn = hls.default_cdn;
-      if (defaultCdn && hls.cdns && hls.cdns[defaultCdn]?.url) {
-        return hls.cdns[defaultCdn].url;
-      }
-    }
   } catch (err) {
     console.warn("Could not extract Vimeo direct stream in browser:", err);
   }
