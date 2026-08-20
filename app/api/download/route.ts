@@ -59,7 +59,9 @@ async function singleAttemptDownload(
       refererArgs.push("--referer", "https://vimeo.com/");
     }
 
-    const actualCookieArgs = vimeoMatch ? [] : cookieArgs;
+    const actualCookieArgs = (vimeoMatch && customCookieFile && fs.existsSync(customCookieFile))
+      ? ["--cookies", customCookieFile]
+      : (vimeoMatch ? [] : cookieArgs);
 
     const args = [
       ...ytDlpBaseArgs,
@@ -327,8 +329,15 @@ export async function POST(req: NextRequest) {
         downloadedRaw = directPath;
         tmpFiles.push(downloadedRaw);
       } else {
-        downloadedRaw = await extractMediaStream(trimmedUrl, rawTemplate, true, customCookiePath, targetVideoQuality);
-        tmpFiles.push(downloadedRaw);
+        try {
+          downloadedRaw = await extractMediaStream(trimmedUrl, rawTemplate, true, customCookiePath, targetVideoQuality);
+          tmpFiles.push(downloadedRaw);
+        } catch (vidErr: any) {
+          if (trimmedUrl.includes("vimeo.com") && (!customCookiePath || !fs.existsSync(customCookiePath))) {
+            throw new Error("Vimeo applique une protection Cloudflare Turnstile sur les serveurs distants. Utilisez l'Extension Chrome SkibidiMP3 pour télécharger directement depuis votre navigateur.");
+          }
+          throw vidErr;
+        }
       }
 
       // FFmpeg processing for Video / GIF
@@ -457,12 +466,20 @@ export async function POST(req: NextRequest) {
         const searchArtist = metadata.artist || "";
         const searchTerms = `${searchArtist} ${searchTitle}`.trim();
 
-        console.log("Tentative de secours audio via SoundCloud scsearch5:", searchTerms);
+        console.log("Tentative de secours audio via SoundCloud / YouTube search:", searchTerms);
         try {
-          downloadedRaw = await extractMediaStream(`scsearch5:${searchTerms}`, rawTemplate, false, customCookiePath);
+          downloadedRaw = await extractMediaStream(`scsearch5:${searchTerms}`, rawTemplate, false);
           tmpFiles.push(downloadedRaw);
         } catch (scErr: any) {
-          throw extractErr;
+          try {
+            downloadedRaw = await extractMediaStream(`ytsearch5:${searchTerms} audio`, rawTemplate, false, customCookiePath);
+            tmpFiles.push(downloadedRaw);
+          } catch {
+            if (trimmedUrl.includes("vimeo.com") && (!customCookiePath || !fs.existsSync(customCookiePath))) {
+              throw new Error("Pour télécharger ce média Vimeo soumis à la sécurité Cloudflare, utilisez l'Extension Chrome SkibidiMP3.");
+            }
+            throw extractErr;
+          }
         }
       }
     }
