@@ -5,7 +5,7 @@ WORKDIR /app
 RUN apk add --no-cache python3 py3-pip ffmpeg curl deno
 
 RUN python3 -m venv /opt/venv && \
-    /opt/venv/bin/pip install --no-cache-dir -U yt-dlp
+    /opt/venv/bin/pip install --no-cache-dir -U yt-dlp "yt-dlp[default]" curl_cffi
 
 ENV PATH="/opt/venv/bin:$PATH"
 
