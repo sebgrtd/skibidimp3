@@ -52,16 +52,17 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
   const [sortBy, setSortBy] = useState<string>("date_desc");
 
   // Platform detection helper
-  const detectPlatform = (rawUrl: string = "") => {
-    const l = rawUrl.toLowerCase();
-    if (l.includes("spotify.com") || l.includes("open.spotify")) return "spotify";
-    if (l.includes("youtube.com") || l.includes("youtu.be")) return "youtube";
-    if (l.includes("soundcloud.com")) return "soundcloud";
+  const detectPlatform = (rawUrl: string = "", rawPlatform?: string) => {
+    if (rawPlatform && rawPlatform !== "generic") return rawPlatform.toLowerCase();
+    const l = (rawUrl || "").toLowerCase();
+    if (l.includes("spotify.com") || l.includes("open.spotify") || l.startsWith("spotify:")) return "spotify";
+    if (l.includes("youtube.com") || l.includes("youtu.be") || l.includes("music.youtube")) return "youtube";
+    if (l.includes("soundcloud.com") || l.includes("snd.sc")) return "soundcloud";
     if (l.includes("twitter.com") || l.includes("x.com") || l.includes("t.co")) return "twitter";
     if (l.includes("tiktok.com")) return "tiktok";
     if (l.includes("instagram.com")) return "instagram";
     if (l.includes("pinterest.com") || l.includes("pin.it")) return "pinterest";
-    if (l.includes("vimeo.com")) return "vimeo";
+    if (l.includes("vimeo.com") || l.includes("player.vimeo")) return "vimeo";
     return "other";
   };
 
@@ -99,7 +100,7 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
         formatFilter === "all" ||
         (item.format && item.format.toLowerCase() === formatFilter.toLowerCase());
 
-      const itemPlatform = detectPlatform(item.url);
+      const itemPlatform = detectPlatform(item.url, (item as any).platform);
       const matchPlatform =
         platformFilter === "all" ||
         (platformFilter === "other" ? itemPlatform === "other" : itemPlatform === platformFilter);
@@ -116,7 +117,7 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
     });
 
     return result;
-  }, [history, searchQuery, formatFilter, sortBy]);
+  }, [history, searchQuery, formatFilter, platformFilter, sortBy]);
 
   const toggleSelect = (id: string) => {
     if (selectedIds.includes(id)) {

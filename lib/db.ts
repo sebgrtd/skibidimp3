@@ -160,9 +160,80 @@ export function createUser(username: string, password: string, isAdmin: boolean 
   return newUser;
 }
 
-export function getAllUsers(): Omit<User, "passwordHash" | "salt">[] {
+export interface UserWithStats extends Omit<User, "passwordHash" | "salt"> {
+  downloadCount?: number;
+}
+
+export function getAllUsers(): UserWithStats[] {
   const users = readJson<User[]>(USERS_FILE);
-  return users.map(({ passwordHash, salt, ...u }) => u);
+  const history = readJson<DownloadHistoryRecord[]>(HISTORY_FILE);
+  return users.map(({ passwordHash, salt, ...u }) => ({
+    ...u,
+    downloadCount: history.filter(h => h.userId === u.id).length,
+  }));
+}
+
+export function deleteUser(userId: string): boolean {
+  const users = readJson<User[]>(USERS_FILE);
+  const targetUser = users.find(u => u.id === userId);
+  if (!targetUser) {
+    throw new Error("Utilisateur introuvable.");
+  }
+  
+  if (targetUser.isAdmin) {
+    const adminCount = users.filter(u => u.isAdmin).length;
+    if (adminCount <= 1) {
+      throw new Error("Impossible de supprimer le dernier compte administrateur.");
+    }
+  }
+
+  const updatedUsers = users.filter(u => u.id !== userId);
+  writeJson(USERS_FILE, updatedUsers);
+
+  // Delete associated sessions
+  const sessions = readJson<UserSession[]>(SESSIONS_FILE);
+  writeJson(SESSIONS_FILE, sessions.filter(s => s.userId !== userId));
+
+  // Delete associated download history
+  const history = readJson<DownloadHistoryRecord[]>(HISTORY_FILE);
+  writeJson(HISTORY_FILE, history.filter(h => h.userId !== userId));
+
+  return true;
+}
+
+export function setUserAdminRole(userId: string, isAdmin: boolean): boolean {
+  const users = readJson<User[]>(USERS_FILE);
+  const user = users.find(u => u.id === userId);
+  if (!user) {
+    throw new Error("Utilisateur introuvable.");
+  }
+  
+  if (!isAdmin && user.isAdmin) {
+    const adminCount = users.filter(u => u.isAdmin).length;
+    if (adminCount <= 1) {
+      throw new Error("Impossible de retirer les droits du dernier administrateur.");
+    }
+  }
+
+  user.isAdmin = isAdmin;
+  writeJson(USERS_FILE, users);
+  return true;
+}
+
+export function resetUserPassword(userId: string, newPassword: string): boolean {
+  const users = readJson<User[]>(USERS_FILE);
+  const user = users.find(u => u.id === userId);
+  if (!user) {
+    throw new Error("Utilisateur introuvable.");
+  }
+  if (!newPassword || newPassword.length < 4) {
+    throw new Error("Le mot de passe doit comporter au moins 4 caractères.");
+  }
+  const { hash, salt } = hashPassword(newPassword);
+  user.passwordHash = hash;
+  user.salt = salt;
+  writeJson(USERS_FILE, users);
+  return true;
 }
 
 export function updateUserPassword(userId: string, newPassword: string): boolean {

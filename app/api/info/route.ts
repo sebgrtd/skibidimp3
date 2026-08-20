@@ -596,17 +596,27 @@ export async function POST(req: NextRequest) {
     }
 
     // --- VIMEO ---
-    if (platform === "vimeo") {
-      const vimeoData = await fetchVimeoMedia(trimmedUrl);
-      if (vimeoData) {
+    if (platform === "vimeo" || trimmedUrl.includes("vimeo.com")) {
+      const idMatch = trimmedUrl.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/[^\/]*\/videos\/|album\/(?:\d+\/)?video\/|video\/|)(\d+)/);
+      const vimeoId = idMatch ? idMatch[1] : null;
+      const embedUrl = vimeoId ? `https://player.vimeo.com/video/${vimeoId}` : trimmedUrl;
+
+      try {
+        const stdout = await runYtDlp([
+          "--dump-json",
+          "--no-warnings",
+          "--referer", "https://vimeo.com/",
+          embedUrl,
+        ]);
+        const data = JSON.parse(stdout);
         return NextResponse.json({
           platform: "vimeo",
           isPlaylist: false,
-          title: vimeoData.title,
-          artist: vimeoData.artist,
-          duration: vimeoData.duration,
-          thumbnail: vimeoData.thumbnail,
-          url: vimeoData.videoUrl || trimmedUrl,
+          title: data.title || "Vidéo Vimeo",
+          artist: data.uploader || data.channel || "Vimeo",
+          duration: data.duration || 0,
+          thumbnail: data.thumbnail || (data.thumbnails && data.thumbnails[0]?.url) || null,
+          url: embedUrl,
           originalUrl: trimmedUrl,
           mediaType: "video",
           hasVideo: true,
@@ -614,6 +624,25 @@ export async function POST(req: NextRequest) {
           hasImage: false,
           availableFormats: ["mp4", "mp3", "wav", "m4a"],
         });
+      } catch (ytErr) {
+        const vimeoData = await fetchVimeoMedia(trimmedUrl);
+        if (vimeoData) {
+          return NextResponse.json({
+            platform: "vimeo",
+            isPlaylist: false,
+            title: vimeoData.title,
+            artist: vimeoData.artist,
+            duration: vimeoData.duration,
+            thumbnail: vimeoData.thumbnail,
+            url: embedUrl,
+            originalUrl: trimmedUrl,
+            mediaType: "video",
+            hasVideo: true,
+            hasAudio: true,
+            hasImage: false,
+            availableFormats: ["mp4", "mp3", "wav", "m4a"],
+          });
+        }
       }
     }
 

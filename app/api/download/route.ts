@@ -51,16 +51,25 @@ async function singleAttemptDownload(
       cookieArgs.push("--cookies", ALT_COOKIES);
     }
 
+    let finalTarget = target;
+    const vimeoMatch = target.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/[^\/]*\/videos\/|album\/(?:\d+\/)?video\/|video\/|)(\d+)/);
+    const refererArgs: string[] = [];
+    if (vimeoMatch) {
+      finalTarget = `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+      refererArgs.push("--referer", "https://vimeo.com/");
+    }
+
     const args = [
       ...ytDlpBaseArgs,
       "--remote-components", "ejs:github",
       ...cookieArgs,
+      ...refererArgs,
       "--user-agent", userAgent,
       ...formatArg,
       "-o", rawTemplate,
       "--no-playlist",
       ...extraFlags,
-      target,
+      finalTarget,
     ];
 
     const proc = spawn(ytDlpCommand, args);

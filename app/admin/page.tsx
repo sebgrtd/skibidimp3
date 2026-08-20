@@ -22,7 +22,13 @@ import {
   UploadCloud,
   AlertTriangle,
   Activity,
-  Play
+  Play,
+  Search,
+  Key,
+  Shield,
+  Lock,
+  UserX,
+  X
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -41,6 +47,7 @@ export interface UserItem {
   username: string;
   isAdmin?: boolean;
   createdAt: string;
+  downloadCount?: number;
 }
 
 export default function AdminPage() {
@@ -62,9 +69,16 @@ export default function AdminPage() {
   const [newPassword, setNewPassword] = useState("");
   const [creatingUser, setCreatingUser] = useState(false);
 
-  // Users List State
+  // Users Management State
   const [usersList, setUsersList] = useState<UserItem[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [userToDelete, setUserToDelete] = useState<UserItem | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [userToResetPass, setUserToResetPass] = useState<UserItem | null>(null);
+  const [resetPassInput, setResetPassInput] = useState("");
+  const [isResettingPass, setIsResettingPass] = useState(false);
+  const [togglingAdminId, setTogglingAdminId] = useState<string | null>(null);
 
   // Change Admin Password State
   const [currentAdminPass, setCurrentAdminPass] = useState("");
@@ -216,6 +230,90 @@ export default function AdminPage() {
       toast.error(err.message || "Impossible de créer le compte.");
     } finally {
       setCreatingUser(false);
+    }
+  };
+
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    setIsDeletingUser(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userToDelete.id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`Utilisateur @${userToDelete.username} supprimé avec succès.`);
+        setUserToDelete(null);
+        await fetchUsers();
+      } else {
+        toast.error(data.error || "Impossible de supprimer cet utilisateur.");
+      }
+    } catch {
+      toast.error("Erreur réseau lors de la suppression.");
+    } finally {
+      setIsDeletingUser(false);
+    }
+  };
+
+  const handleToggleAdminRole = async (usr: UserItem) => {
+    setTogglingAdminId(usr.id);
+    try {
+      const newRole = !usr.isAdmin;
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: usr.id,
+          action: "toggle_admin",
+          isAdmin: newRole,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(newRole ? `@${usr.username} est désormais administrateur.` : `Droits administrateur retirés à @${usr.username}.`);
+        await fetchUsers();
+      } else {
+        toast.error(data.error || "Impossible de modifier le rôle.");
+      }
+    } catch {
+      toast.error("Erreur de connexion.");
+    } finally {
+      setTogglingAdminId(null);
+    }
+  };
+
+  const handleConfirmResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userToResetPass || !resetPassInput.trim()) return;
+    if (resetPassInput.trim().length < 4) {
+      toast.error("Le mot de passe doit comporter au moins 4 caractères.");
+      return;
+    }
+    setIsResettingPass(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: userToResetPass.id,
+          action: "reset_password",
+          newPassword: resetPassInput.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`Mot de passe de @${userToResetPass.username} réinitialisé avec succès !`);
+        setUserToResetPass(null);
+        setResetPassInput("");
+      } else {
+        toast.error(data.error || "Erreur lors de la réinitialisation.");
+      }
+    } catch {
+      toast.error("Erreur réseau.");
+    } finally {
+      setIsResettingPass(false);
     }
   };
 
@@ -679,19 +777,41 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 3: Liste des Membres */}
+        {/* Tab 3: Liste & Gestion des Membres */}
         {activeTab === "users" && (
           <div className="space-y-5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-1">
-                <h3 className="text-sm font-semibold text-zinc-200">Membres Enregistrés</h3>
+                <h3 className="text-sm font-semibold text-zinc-200">Gestion des Utilisateurs</h3>
                 <p className="text-xs text-zinc-400">
-                  Vue d'ensemble de tous les comptes enregistrés sur la plateforme.
+                  Gérez les permissions, réinitialisez les mots de passe et supprimez des comptes.
                 </p>
               </div>
-              <span className="text-xs font-medium text-zinc-400 bg-zinc-900 border border-zinc-800 px-3 py-1 rounded-lg">
-                Total : {usersList.length} membre(s)
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-zinc-400 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-xl">
+                  Total : {usersList.length} membre(s)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("create-user")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 transition-all"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  <span>Nouveau</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Search filter for users */}
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+              <input
+                type="text"
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                placeholder="Rechercher un membre par nom d'utilisateur..."
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+              />
             </div>
 
             {loadingUsers ? (
@@ -706,35 +826,100 @@ export default function AdminPage() {
             ) : (
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 overflow-hidden shadow-xl">
                 <div className="divide-y divide-zinc-800/60">
-                  {usersList.map((usr) => (
-                    <div
-                      key={usr.id}
-                      className="flex items-center justify-between p-4 text-xs hover:bg-zinc-800/30 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center font-bold text-zinc-200">
-                          {usr.username.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-zinc-100">@{usr.username}</span>
-                            {usr.isAdmin && (
-                              <span className="rounded-md bg-indigo-500/10 border border-indigo-500/30 px-1.5 py-0.5 text-[9px] font-bold text-indigo-400 uppercase">
-                                Admin
-                              </span>
-                            )}
+                  {usersList
+                    .filter((u) => !userSearchQuery || u.username.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                    .map((usr) => {
+                      const isSelf = usr.id === currentUser?.id;
+                      return (
+                        <div
+                          key={usr.id}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-4 text-xs hover:bg-zinc-800/20 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-sm border ${
+                              usr.isAdmin 
+                                ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-400" 
+                                : "bg-zinc-800 border-zinc-700 text-zinc-200"
+                            }`}>
+                              {usr.username.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-zinc-100 text-sm">@{usr.username}</span>
+                                {isSelf && (
+                                  <span className="rounded-md bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400">
+                                    Vous
+                                  </span>
+                                )}
+                                {usr.isAdmin ? (
+                                  <span className="rounded-md bg-indigo-500/10 border border-indigo-500/30 px-2 py-0.5 text-[10px] font-bold text-indigo-400 uppercase tracking-wide">
+                                    Admin
+                                  </span>
+                                ) : (
+                                  <span className="rounded-md bg-zinc-800 border border-zinc-700 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                                    Membre
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-[11px] text-zinc-500">
+                                <span>{usr.downloadCount || 0} téléchargement(s)</span>
+                                <span>•</span>
+                                <span>Inscrit le {new Date(usr.createdAt).toLocaleDateString("fr-FR")}</span>
+                              </div>
+                            </div>
                           </div>
-                          <span className="text-[11px] text-zinc-500">ID: {usr.id.substring(0, 8)}...</span>
-                        </div>
-                      </div>
 
-                      <div className="text-right">
-                        <span className="text-[11px] text-zinc-400 font-mono">
-                          Inscrit le {new Date(usr.createdAt).toLocaleDateString("fr-FR")}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-2 self-end sm:self-center">
+                            {/* Toggle Admin */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleAdminRole(usr)}
+                              disabled={togglingAdminId === usr.id || (isSelf && usr.isAdmin)}
+                              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                                usr.isAdmin
+                                  ? "border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+                                  : "border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20"
+                              } disabled:opacity-40`}
+                              title={usr.isAdmin ? "Rétrograder en membre standard" : "Promouvoir en Administrateur"}
+                            >
+                              {togglingAdminId === usr.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Shield className="h-3.5 w-3.5" />
+                              )}
+                              <span>{usr.isAdmin ? "Rétrograder" : "Promouvoir Admin"}</span>
+                            </button>
+
+                            {/* Reset Password */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUserToResetPass(usr);
+                                setResetPassInput("");
+                              }}
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 transition-colors text-xs font-medium"
+                              title="Réinitialiser le mot de passe"
+                            >
+                              <Key className="h-3.5 w-3.5 text-zinc-400" />
+                              <span>Mot de passe</span>
+                            </button>
+
+                            {/* Delete User */}
+                            <button
+                              type="button"
+                              onClick={() => setUserToDelete(usr)}
+                              disabled={isSelf}
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-rose-500/20 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/40 transition-colors text-xs font-medium disabled:opacity-30 disabled:cursor-not-allowed"
+                              title={isSelf ? "Vous ne pouvez pas supprimer votre propre compte" : "Supprimer définitivement l'utilisateur"}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>Supprimer</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             )}
@@ -1026,6 +1211,86 @@ export default function AdminPage() {
         onConfirm={handleConfirmDeleteCode}
         onCancel={() => setDeleteCodeId(null)}
       />
+
+      {/* Confirmation Modal for Delete User */}
+      <ConfirmModal
+        isOpen={userToDelete !== null}
+        title={`Supprimer le compte @${userToDelete?.username}`}
+        message={`Êtes-vous certain de vouloir supprimer définitivement l'utilisateur @${userToDelete?.username} ? Toutes ses sessions actives et l'intégralité de son historique de téléchargement seront définitivement effacés.`}
+        confirmLabel={isDeletingUser ? "Suppression..." : "Supprimer l'utilisateur"}
+        onConfirm={handleConfirmDeleteUser}
+        onCancel={() => setUserToDelete(null)}
+      />
+
+      {/* Reset Password Modal */}
+      {userToResetPass && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Key className="h-5 w-5 text-indigo-400" />
+                <h3 className="text-sm font-semibold text-zinc-100">
+                  Réinitialiser le mot de passe
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setUserToResetPass(null);
+                  setResetPassInput("");
+                }}
+                className="text-zinc-500 hover:text-zinc-300 p-1 rounded-lg transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-400">
+              Définir un nouveau mot de passe pour le compte <strong className="text-zinc-200">@{userToResetPass.username}</strong>.
+            </p>
+
+            <form onSubmit={handleConfirmResetPassword} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-300">Nouveau mot de passe</label>
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  value={resetPassInput}
+                  onChange={(e) => setResetPassInput(e.target.value)}
+                  placeholder="Minimum 4 caractères"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserToResetPass(null);
+                    setResetPassInput("");
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResettingPass || !resetPassInput.trim()}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 disabled:opacity-50 transition-all"
+                >
+                  {isResettingPass ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Check className="h-3.5 w-3.5" />
+                  )}
+                  <span>Mettre à jour</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Modal for Delete Cookies */}
       <ConfirmModal
