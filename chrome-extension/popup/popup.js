@@ -534,28 +534,13 @@ async function handleDownload() {
     return;
   }
 
-  if (url.includes("youtube.com") || url.includes("youtu.be")) {
-    url = cleanYouTubeMediaUrl(url);
-    elements.urlInput.value = url;
-  }
-
-  // If info not fetched yet, fetch it first
-  if (!state.currentMedia || !state.currentMedia.title) {
-    await fetchMediaInfo(url);
-  }
-
-  const serverUrl = cleanServerUrl(state.serverUrl);
-  const format = elements.formatSelect.value;
-  const bitrate = elements.bitrateSelect.value;
-  const boost = elements.boostSelect.value;
-  const editTitle = elements.editTitle.value.trim() || (state.currentMedia?.title) || "Musique";
-  const editArtist = elements.editArtist.value.trim() || (state.currentMedia?.artist) || "";
-  const thumbnail = state.currentMedia?.thumbnail || "";
-
+  // 1. INSTANT UI FEEDBACK (First microsecond) - Disable button & show progress bar immediately
   elements.downloadBtn.disabled = true;
   elements.progressContainer.classList.remove("hidden");
-  elements.progressFill.style.width = "15%";
-  
+  elements.progressFill.style.width = "12%";
+  hideStatus();
+
+  const format = elements.formatSelect.value;
   const isVideo = format === "mp4";
   const isImage = format === "png" || format === "jpg";
   const isGif = format === "gif";
@@ -567,62 +552,35 @@ async function handleDownload() {
       : isGif 
         ? "Génération du GIF..." 
         : "Connexion et extraction audio...";
-        
-  hideStatus();
 
-  let progress = 15;
+  let progress = 12;
   const interval = setInterval(() => {
     if (progress < 85) {
-      progress += Math.floor(Math.random() * 8) + 2;
+      progress += Math.floor(Math.random() * 6) + 2;
       elements.progressFill.style.width = `${progress}%`;
-      if (progress > 50) elements.progressLabel.textContent = isImage ? "Traitement de l'image..." : isVideo ? "Encodage vidéo HD..." : isGif ? "Conversion GIF..." : "Conversion 320kbps...";
-      if (progress > 75) elements.progressLabel.textContent = "Finalisation du fichier...";
+      if (progress > 35) elements.progressLabel.textContent = isImage ? "Traitement de l'image..." : isVideo ? "Encodage vidéo HD..." : isGif ? "Conversion GIF..." : "Conversion audio...";
+      if (progress > 70) elements.progressLabel.textContent = "Finalisation du fichier...";
     }
-  }, 400);
+  }, 350);
 
-  // --- 1. DIRECT CLIENT-SIDE MP4 EXTRACTION (Zero VPS) ---
-  if (isVideo && (url.includes("youtube.com") || url.includes("youtu.be"))) {
-    let directStream = null;
-
-    try {
-      let tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-      if (!tabs || !tabs.length) tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const activeTab = tabs && tabs[0];
-      if (activeTab && activeTab.id && (activeTab.url?.includes("youtube.com") || activeTab.url?.includes("youtu.be"))) {
-        directStream = await chrome.tabs.sendMessage(activeTab.id, { action: "GET_DIRECT_STREAMS" });
-      }
-    } catch {}
-
-    if (directStream && directStream.directMp4Url) {
-      clearInterval(interval);
-      elements.progressFill.style.width = "100%";
-      elements.progressLabel.textContent = "Téléchargement direct MP4 HD lancé !";
-
-      const res = await chrome.runtime.sendMessage({
-        action: "DIRECT_CLIENT_DOWNLOAD",
-        streamUrl: directStream.directMp4Url,
-        title: editTitle || directStream.title,
-        artist: editArtist || directStream.artist,
-        format: "mp4",
-        bitrate: directStream.directMp4Quality || "720p",
-        thumbnail: thumbnail || directStream.thumbnail,
-        originalUrl: url,
-      });
-
-      if (res && res.success) {
-        showStatus(`« ${editTitle} » (MP4 HD) téléchargé avec succès !`, "success");
-        elements.downloadBtn.disabled = false;
-        setTimeout(() => {
-          elements.progressContainer.classList.add("hidden");
-          elements.progressFill.style.width = "0%";
-        }, 2000);
-        return;
-      }
-    }
-  }
-
-  // --- 2. SERVER TRANSCODING WITH AUTO-INJECTED REAL YOUTUBE COOKIES ---
   try {
+    if (url.includes("youtube.com") || url.includes("youtu.be")) {
+      url = cleanYouTubeMediaUrl(url);
+      elements.urlInput.value = url;
+    }
+
+    // If info not fetched yet, fetch it
+    if (!state.currentMedia || !state.currentMedia.title) {
+      await fetchMediaInfo(url);
+    }
+
+    const serverUrl = cleanServerUrl(state.serverUrl);
+    const bitrate = elements.bitrateSelect.value;
+    const boost = elements.boostSelect.value;
+    const editTitle = elements.editTitle.value.trim() || (state.currentMedia?.title) || "Musique";
+    const editArtist = elements.editArtist.value.trim() || (state.currentMedia?.artist) || "";
+    const thumbnail = state.currentMedia?.thumbnail || "";
+
     const headers = { "Content-Type": "application/json" };
     if (state.authToken) {
       headers["Authorization"] = `Bearer ${state.authToken}`;
@@ -706,11 +664,12 @@ async function handleDownload() {
     clearInterval(interval);
     showStatus(err.message || "Erreur lors du téléchargement.", "error");
   } finally {
+    clearInterval(interval);
     elements.downloadBtn.disabled = false;
     setTimeout(() => {
       elements.progressContainer.classList.add("hidden");
       elements.progressFill.style.width = "0%";
-    }, 2000);
+    }, 2500);
   }
 }
 
