@@ -468,6 +468,28 @@ async function fetchMediaInfo(url) {
   }
 }
 
+// Extract YouTube cookies formatted for yt-dlp Netscape format
+async function getYoutubeCookies() {
+  try {
+    const cookies = await chrome.cookies.getAll({ domain: ".youtube.com" });
+    if (!cookies || !cookies.length) return "";
+
+    let netscape = "# Netscape HTTP Cookie File\n";
+    for (const c of cookies) {
+      const domain = c.domain.startsWith(".") ? c.domain : "." + c.domain;
+      const flag = domain.startsWith(".") ? "TRUE" : "FALSE";
+      const path = c.path || "/";
+      const secure = c.secure ? "TRUE" : "FALSE";
+      const expiration = c.expirationDate ? Math.floor(c.expirationDate) : Math.floor(Date.now() / 1000) + 86400 * 30;
+      netscape += `${domain}\t${flag}\t${path}\t${secure}\t${expiration}\t${c.name}\t${c.value}\n`;
+    }
+    return netscape;
+  } catch (err) {
+    console.warn("Could not extract YouTube cookies:", err);
+    return "";
+  }
+}
+
 // Clean filename builder helper
 function buildSafeFilename(title, artist, format) {
   let cleanArtist = (artist || "").replace(/ - Topic$/, "").replace(/VEVO$/, "").trim();
@@ -519,7 +541,7 @@ async function handleDownload() {
   elements.progressLabel.textContent = isImage 
     ? "Récupération de l'image HD..." 
     : isVideo 
-      ? "Extraction du flux vidéo..." 
+      ? "Extraction du flux vidéo HD..." 
       : isGif 
         ? "Génération du GIF..." 
         : "Connexion et extraction audio...";
@@ -536,50 +558,19 @@ async function handleDownload() {
     }
   }, 400);
 
-  // --- DIRECT CLIENT-SIDE MP4 DOWNLOAD (Zero VPS - 100% Bypass Bot Walls) ---
+  // --- 1. DIRECT CLIENT-SIDE MP4 EXTRACTION (Zero VPS) ---
   if (isVideo && (url.includes("youtube.com") || url.includes("youtu.be"))) {
     let directStream = null;
 
-    // 1. Try from active YouTube tab
     try {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      let tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      if (!tabs || !tabs.length) tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const activeTab = tabs && tabs[0];
       if (activeTab && activeTab.id && (activeTab.url?.includes("youtube.com") || activeTab.url?.includes("youtu.be"))) {
         directStream = await chrome.tabs.sendMessage(activeTab.id, { action: "GET_DIRECT_STREAMS" });
       }
     } catch {}
 
-    // 2. Try direct client-side fetch from extension
-    if (!directStream || !directStream.directMp4Url) {
-      try {
-        const videoIdMatch = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-        if (videoIdMatch) {
-          const videoId = videoIdMatch[1];
-          const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
-          if (pageRes.ok) {
-            const html = await pageRes.text();
-            const jsonMatch = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
-            if (jsonMatch) {
-              const playerData = JSON.parse(jsonMatch[1]);
-              const formats = playerData.streamingData?.formats || [];
-              const directMp4 = formats.find((f) => f.itag === 22 && f.url) || formats.find((f) => f.itag === 18 && f.url) || formats.find((f) => f.url && f.mimeType?.includes("video/mp4"));
-              if (directMp4 && directMp4.url) {
-                directStream = {
-                  title: playerData.videoDetails?.title || editTitle,
-                  artist: playerData.videoDetails?.author || editArtist,
-                  thumbnail: playerData.videoDetails?.thumbnail?.thumbnails?.pop()?.url || thumbnail,
-                  directMp4Url: directMp4.url,
-                  directMp4Quality: directMp4.qualityLabel || "720p",
-                };
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("Client-side YouTube direct fetch error:", err);
-      }
-    }
-
-    // 3. If direct stream resolved client-side, download instantly!
     if (directStream && directStream.directMp4Url) {
       clearInterval(interval);
       elements.progressFill.style.width = "100%";
@@ -608,12 +599,14 @@ async function handleDownload() {
     }
   }
 
-  // --- STANDARD VPS TRANSCODING FALLBACK ---
+  // --- 2. SERVER TRANSCODING WITH AUTO-INJECTED REAL YOUTUBE COOKIES ---
   try {
     const headers = { "Content-Type": "application/json" };
     if (state.authToken) {
       headers["Authorization"] = `Bearer ${state.authToken}`;
     }
+
+    const youtubeCookies = await getYoutubeCookies();
 
     const payload = {
       url: state.currentMedia?.originalUrl || state.currentMedia?.url || url,
@@ -623,6 +616,7 @@ async function handleDownload() {
       editTitle,
       editArtist,
       thumbnail,
+      youtubeCookies,
       metadata: {
         title: editTitle,
         artist: editArtist,

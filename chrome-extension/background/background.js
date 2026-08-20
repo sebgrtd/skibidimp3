@@ -170,6 +170,28 @@ function cleanYouTubeMediaUrl(rawUrl) {
   return rawUrl;
 }
 
+// Extract YouTube cookies formatted for yt-dlp Netscape format
+async function getYoutubeCookies() {
+  try {
+    const cookies = await chrome.cookies.getAll({ domain: ".youtube.com" });
+    if (!cookies || !cookies.length) return "";
+
+    let netscape = "# Netscape HTTP Cookie File\n";
+    for (const c of cookies) {
+      const domain = c.domain.startsWith(".") ? c.domain : "." + c.domain;
+      const flag = domain.startsWith(".") ? "TRUE" : "FALSE";
+      const path = c.path || "/";
+      const secure = c.secure ? "TRUE" : "FALSE";
+      const expiration = c.expirationDate ? Math.floor(c.expirationDate) : Math.floor(Date.now() / 1000) + 86400 * 30;
+      netscape += `${domain}\t${flag}\t${path}\t${secure}\t${expiration}\t${c.name}\t${c.value}\n`;
+    }
+    return netscape;
+  } catch (err) {
+    console.warn("Could not extract YouTube cookies:", err);
+    return "";
+  }
+}
+
 // Server-Side Transcode Download Handler
 async function handleQuickDownload(url, customOptions = {}) {
   const settings = await getSettings();
@@ -197,6 +219,7 @@ async function handleQuickDownload(url, customOptions = {}) {
   const format = customOptions.format || settings.defaultFormat || "mp3";
   const bitrate = customOptions.bitrate || settings.defaultBitrate || "320k";
   const boost = customOptions.boost || settings.defaultBoost || "0";
+  const youtubeCookies = await getYoutubeCookies();
 
   // 2. Trigger Download API
   const downloadPayload = {
@@ -207,6 +230,7 @@ async function handleQuickDownload(url, customOptions = {}) {
     editTitle: title,
     editArtist: artist,
     thumbnail: info.thumbnail,
+    youtubeCookies,
     metadata: {
       title,
       artist,

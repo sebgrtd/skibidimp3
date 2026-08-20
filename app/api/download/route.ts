@@ -26,12 +26,15 @@ async function singleAttemptDownload(
   rawTemplate: string,
   extraFlags: string[],
   userAgent: string,
-  isVideo: boolean = false
+  isVideo: boolean = false,
+  customCookieFile?: string
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const formatArg = isVideo ? ["-f", "bv*+ba/b", "--merge-output-format", "mp4"] : ["-f", "ba/b", "-x"];
     const cookieArgs: string[] = [];
-    if (fs.existsSync(COOKIES_FILE)) {
+    if (customCookieFile && fs.existsSync(customCookieFile)) {
+      cookieArgs.push("--cookies", customCookieFile);
+    } else if (fs.existsSync(COOKIES_FILE)) {
       cookieArgs.push("--cookies", COOKIES_FILE);
     } else if (fs.existsSync(ALT_COOKIES)) {
       cookieArgs.push("--cookies", ALT_COOKIES);
@@ -72,7 +75,7 @@ async function singleAttemptDownload(
   });
 }
 
-async function extractMediaStream(downloadUrl: string, rawTemplateBase: string, isVideo: boolean = false): Promise<string> {
+async function extractMediaStream(downloadUrl: string, rawTemplateBase: string, isVideo: boolean = false, customCookieFile?: string): Promise<string> {
   const isModule = PYTHON_PATH.includes("python");
   const ytDlpCommand = isModule ? PYTHON_PATH : "yt-dlp";
   const ytDlpBaseArgs = isModule ? ["-m", "yt_dlp"] : [];
@@ -83,7 +86,7 @@ async function extractMediaStream(downloadUrl: string, rawTemplateBase: string, 
 
   const attempt = async (suffix: string, flags: string[]) => {
     const tpl = path.join(baseDir, `${baseName}_${suffix}.%(ext)s`);
-    return singleAttemptDownload(ytDlpCommand, ytDlpBaseArgs, downloadUrl, tpl, flags, USER_AGENT, isVideo);
+    return singleAttemptDownload(ytDlpCommand, ytDlpBaseArgs, downloadUrl, tpl, flags, USER_AGENT, isVideo, customCookieFile);
   };
 
   // Attempt 1: android,web,tv
@@ -157,6 +160,7 @@ export async function POST(req: NextRequest) {
       editArtist,
       thumbnail,
       boost,
+      youtubeCookies,
     } = body;
 
     if (!url || typeof url !== "string") {
@@ -204,6 +208,20 @@ export async function POST(req: NextRequest) {
     const uniqueId = Date.now() + "_" + Math.random().toString(36).substring(2, 9);
     const outPath = path.join(os.tmpdir(), `out_${uniqueId}.${lowerFormat}`);
     tmpFiles.push(outPath);
+
+    let customCookiePath = "";
+    if (youtubeCookies && typeof youtubeCookies === "string" && youtubeCookies.trim().length > 10) {
+      customCookiePath = path.join(os.tmpdir(), `yt_cookies_${uniqueId}.txt`);
+      fs.writeFileSync(customCookiePath, youtubeCookies.trim());
+      tmpFiles.push(customCookiePath);
+
+      // Persist to server cookies directory so future web downloads also benefit
+      try {
+        const dataDir = path.join(process.cwd(), ".data");
+        if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+        fs.writeFileSync(COOKIES_FILE, youtubeCookies.trim());
+      } catch {}
+    }
 
     // ==========================================
     // 1. IMAGE DOWNLOAD (PNG / JPG)
@@ -262,7 +280,7 @@ export async function POST(req: NextRequest) {
         downloadedRaw = directPath;
         tmpFiles.push(downloadedRaw);
       } else {
-        downloadedRaw = await extractMediaStream(trimmedUrl, rawTemplate, true);
+        downloadedRaw = await extractMediaStream(trimmedUrl, rawTemplate, true, customCookiePath);
         tmpFiles.push(downloadedRaw);
       }
 
@@ -379,7 +397,7 @@ export async function POST(req: NextRequest) {
       downloadedRaw = trimmedUrl;
     } else {
       try {
-        downloadedRaw = await extractMediaStream(downloadTargetUrl, rawTemplate, false);
+        downloadedRaw = await extractMediaStream(downloadTargetUrl, rawTemplate, false, customCookiePath);
         tmpFiles.push(downloadedRaw);
       } catch (extractErr: any) {
         const searchTitle = metadata.title || "music";
@@ -388,7 +406,7 @@ export async function POST(req: NextRequest) {
 
         console.log("Tentative de secours audio via SoundCloud scsearch5:", searchTerms);
         try {
-          downloadedRaw = await extractMediaStream(`scsearch5:${searchTerms}`, rawTemplate, false);
+          downloadedRaw = await extractMediaStream(`scsearch5:${searchTerms}`, rawTemplate, false, customCookiePath);
           tmpFiles.push(downloadedRaw);
         } catch (scErr: any) {
           throw extractErr;
