@@ -1,8 +1,25 @@
-// SkibidiMP3 - Universal Content Script (Draggable Floating Overlay + Direct Media Detection)
+// SkibidiMP3 - Universal Content Script (Draggable Floating Overlay + Seamless In-Page UI Integration)
 
 (() => {
   let isConverting = false;
-  let lastNotifiedUrl = "";
+  let userPrefs = { showOverlay: true, showInPage: true };
+
+  // Load preferences from storage
+  function loadPrefs() {
+    chrome.storage.local.get({ showOverlay: true, showInPage: true }, (data) => {
+      userPrefs = data;
+      checkAndInject();
+    });
+  }
+
+  // Listen for preference changes from popup
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.showOverlay) userPrefs.showOverlay = changes.showOverlay.newValue;
+    if (changes.showInPage) userPrefs.showInPage = changes.showInPage.newValue;
+    checkAndInject();
+  });
+
+  loadPrefs();
 
   // -------------------------------------------------------------
   // 1. Platform & Media Detection
@@ -230,7 +247,13 @@
   // 3. Universal Draggable Floating Overlay
   // -------------------------------------------------------------
   function injectDraggableFloatingOverlay() {
-    if (document.getElementById("skibidi-draggable-overlay")) return;
+    const existing = document.getElementById("skibidi-draggable-overlay");
+    if (!userPrefs.showOverlay) {
+      if (existing) existing.remove();
+      return;
+    }
+
+    if (existing) return;
 
     const platform = detectMediaPage();
     if (!platform) return;
@@ -329,7 +352,6 @@
     let initialLeft = 0, initialTop = 0;
 
     const onPointerDown = (e) => {
-      // Don't drag if clicking menu or close button
       if (e.target.closest("#skibidi-overlay-menu") || e.target.closest("#skibidi-overlay-close")) return;
 
       isDragging = true;
@@ -384,7 +406,6 @@
 
     overlay.addEventListener("pointerdown", onPointerDown);
 
-    // Dropdown toggle
     dropdownToggle.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -398,14 +419,12 @@
       }
     });
 
-    // Close button
     closeBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       overlay.remove();
     });
 
-    // Main button action
     mainBtn.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -413,7 +432,6 @@
       await triggerUniversalDownload("vps-mp3", mainBtn);
     });
 
-    // Menu actions
     menu.querySelectorAll(".skibidi-menu-item").forEach((item) => {
       item.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -426,22 +444,79 @@
   }
 
   // -------------------------------------------------------------
-  // 4. In-Page YouTube Button Injection (Below Player)
+  // 4. Seamless In-Page UI Injection Across All Platforms
   // -------------------------------------------------------------
-  function injectYouTubeInPageButton() {
-    if (!window.location.href.includes("watch?v=") && !window.location.href.includes("/shorts/")) return;
-    if (document.getElementById("skibidi-action-container")) return;
+  function injectSeamlessInPageButton() {
+    const existing = document.getElementById("skibidi-action-container");
+    if (!userPrefs.showInPage) {
+      if (existing) existing.remove();
+      return;
+    }
 
-    const targets = [
-      "#top-row #actions #top-level-buttons-computed",
-      "#top-row #actions #actions-inner",
-      "#menu #top-level-buttons-computed",
-      "#actions #top-level-buttons-computed",
-      "#owner",
-    ];
+    const platform = detectMediaPage();
+    if (!platform) {
+      if (existing) existing.remove();
+      return;
+    }
 
+    if (existing && existing.classList.contains(`skibidi-inpage-${platform}`)) {
+      return; // Already cleanly injected
+    }
+
+    // Platform-specific target selectors
+    const platformTargets = {
+      youtube: [
+        "#top-row #actions #top-level-buttons-computed",
+        "#top-row #actions #actions-inner",
+        "#menu #top-level-buttons-computed",
+        "#actions #top-level-buttons-computed",
+        "#owner",
+      ],
+      spotify: [
+        '[data-testid="action-bar-row"]',
+        '[data-testid="track-detail"] [data-testid="action-bar-row"]',
+        '.main-actionBar-ActionBarRow',
+        '[data-testid="now-playing-widget"]',
+      ],
+      soundcloud: [
+        '.soundActions .sc-button-group',
+        '.listenEngagements .sc-button-group',
+        '.soundTitle__actions',
+        '.sc-button-group',
+      ],
+      tiktok: [
+        '[data-e2e="browse-action-bar"]',
+        '[data-e2e="feed-video-action-bar"]',
+        '[data-e2e="video-author-container"]',
+        '.video-action-bar',
+      ],
+      instagram: [
+        'article section:has(svg)',
+        'article section',
+        'div[role="presentation"] section',
+        'section:has(svg[aria-label])',
+      ],
+      twitter: [
+        'article [role="group"]',
+        'div[role="group"][id*="id__"]',
+      ],
+      pinterest: [
+        '[data-test-id="pin-action-buttons"]',
+        '[data-test-id="PinActionButtons"]',
+        '[data-test-id="save-button"]',
+      ],
+      vimeo: [
+        'aside[aria-label="Actions"]',
+        '[data-testid="video-actions"]',
+        '.video_actions',
+        '#watch-header',
+        '.player-container',
+      ],
+    };
+
+    const selectors = platformTargets[platform] || [];
     let targetEl = null;
-    for (const selector of targets) {
+    for (const selector of selectors) {
       const el = document.querySelector(selector);
       if (el) {
         targetEl = el;
@@ -449,68 +524,72 @@
       }
     }
 
-    if (targetEl) {
-      const container = document.createElement("div");
-      container.id = "skibidi-action-container";
-      container.className = "skibidi-btn-group";
+    if (!targetEl) return;
 
-      const mainBtn = document.createElement("button");
-      mainBtn.id = "skibidi-quick-download-btn";
-      mainBtn.className = "skibidi-yt-btn";
-      mainBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-        <span>MP3 Boosté</span>
-      `;
+    if (existing) existing.remove();
 
-      const dropdownBtn = document.createElement("button");
-      dropdownBtn.className = "skibidi-yt-btn skibidi-dropdown-toggle";
-      dropdownBtn.title = "Options";
-      dropdownBtn.innerHTML = `
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-      `;
+    const container = document.createElement("div");
+    container.id = "skibidi-action-container";
+    container.className = `skibidi-btn-group skibidi-inpage-${platform}`;
 
-      const menu = document.createElement("div");
-      menu.className = "skibidi-dropdown-menu hidden";
-      menu.innerHTML = `
-        <div class="skibidi-menu-header">Options SkibidiMP3</div>
-        <button class="skibidi-menu-item" data-action="vps-mp3">
-          <div class="menu-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
-          <div class="menu-text"><strong>MP3 320k Boosté</strong><small>Transcodage serveur + Tags ID3</small></div>
-        </button>
-        <button class="skibidi-menu-item" data-action="client-mp4">
-          <div class="menu-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2"></rect></svg></div>
-          <div class="menu-text"><strong>MP4 Direct HD</strong><small>Téléchargement direct</small></div>
-        </button>
-      `;
+    const mainBtn = document.createElement("button");
+    mainBtn.id = "skibidi-quick-download-btn";
+    mainBtn.className = "skibidi-yt-btn";
+    mainBtn.title = "Télécharger en MP3 320k Boosté";
+    mainBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+      <span>MP3 Boosté</span>
+    `;
 
-      dropdownBtn.addEventListener("click", (e) => {
+    const dropdownBtn = document.createElement("button");
+    dropdownBtn.className = "skibidi-yt-btn skibidi-dropdown-toggle";
+    dropdownBtn.title = "Options";
+    dropdownBtn.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    `;
+
+    const menu = document.createElement("div");
+    menu.className = "skibidi-dropdown-menu hidden";
+    menu.innerHTML = `
+      <div class="skibidi-menu-header">Options SkibidiMP3</div>
+      <button class="skibidi-menu-item" data-action="vps-mp3">
+        <div class="menu-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
+        <div class="menu-text"><strong>MP3 320k Boosté</strong><small>Transcodage serveur + Tags ID3</small></div>
+      </button>
+      <button class="skibidi-menu-item" data-action="client-mp4">
+        <div class="menu-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2"></rect></svg></div>
+        <div class="menu-text"><strong>MP4 Vidéo HD</strong><small>Téléchargement vidéo direct</small></div>
+      </button>
+    `;
+
+    dropdownBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      menu.classList.toggle("hidden");
+    });
+
+    document.addEventListener("click", () => menu.classList.add("hidden"));
+
+    mainBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerUniversalDownload("vps-mp3", mainBtn);
+    });
+
+    menu.querySelectorAll(".skibidi-menu-item").forEach((item) => {
+      item.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        menu.classList.toggle("hidden");
+        menu.classList.add("hidden");
+        triggerUniversalDownload(item.getAttribute("data-action"), mainBtn);
       });
+    });
 
-      document.addEventListener("click", () => menu.classList.add("hidden"));
+    container.appendChild(mainBtn);
+    container.appendChild(dropdownBtn);
+    container.appendChild(menu);
 
-      mainBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerUniversalDownload("vps-mp3", mainBtn);
-      });
-
-      menu.querySelectorAll(".skibidi-menu-item").forEach((item) => {
-        item.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          menu.classList.add("hidden");
-          triggerUniversalDownload(item.getAttribute("data-action"), mainBtn);
-        });
-      });
-
-      container.appendChild(mainBtn);
-      container.appendChild(dropdownBtn);
-      container.appendChild(menu);
-      targetEl.appendChild(container);
-    }
+    targetEl.appendChild(container);
   }
 
   // -------------------------------------------------------------
@@ -632,17 +711,28 @@
   function checkAndInject() {
     const platform = detectMediaPage();
     if (platform) {
-      injectDraggableFloatingOverlay();
-      if (platform === "youtube") {
-        injectYouTubeInPageButton();
+      if (userPrefs.showOverlay) {
+        injectDraggableFloatingOverlay();
+      } else {
+        const existingOverlay = document.getElementById("skibidi-draggable-overlay");
+        if (existingOverlay) existingOverlay.remove();
+      }
+
+      if (userPrefs.showInPage) {
+        injectSeamlessInPageButton();
+      } else {
+        const existingInPage = document.getElementById("skibidi-action-container");
+        if (existingInPage) existingInPage.remove();
       }
     } else {
-      const existing = document.getElementById("skibidi-draggable-overlay");
-      if (existing) existing.remove();
+      const existingOverlay = document.getElementById("skibidi-draggable-overlay");
+      if (existingOverlay) existingOverlay.remove();
+      const existingInPage = document.getElementById("skibidi-action-container");
+      if (existingInPage) existingInPage.remove();
     }
   }
 
-  // Watch URL changes in Single Page Apps (YouTube, Spotify, Instagram, TikTok, etc.)
+  // Watch URL and DOM changes in Single Page Apps (YouTube, Spotify, Instagram, TikTok, etc.)
   let lastUrl = window.location.href;
   const urlObserver = new MutationObserver(() => {
     if (window.location.href !== lastUrl) {

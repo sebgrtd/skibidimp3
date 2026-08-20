@@ -75,6 +75,8 @@ const elements = {
   loginBtn: document.getElementById("login-btn"),
   userDisplayName: document.getElementById("user-display-name"),
   logoutBtn: document.getElementById("logout-btn"),
+  prefShowOverlay: document.getElementById("pref-show-overlay"),
+  prefShowInPage: document.getElementById("pref-show-inpage"),
   prefDefaultFormat: document.getElementById("pref-default-format"),
   prefDefaultBitrate: document.getElementById("pref-default-bitrate"),
 };
@@ -95,6 +97,8 @@ async function loadStoredSettings() {
     serverUrl: DEFAULT_SERVER_URL,
     authToken: null,
     authUser: null,
+    showOverlay: true,
+    showInPage: true,
     defaultFormat: "mp3",
     defaultBitrate: "320k",
     defaultBoost: "0",
@@ -109,6 +113,8 @@ async function loadStoredSettings() {
   state = { ...state, ...data };
 
   elements.serverUrlInput.value = state.serverUrl;
+  elements.prefShowOverlay.checked = state.showOverlay !== false;
+  elements.prefShowInPage.checked = state.showInPage !== false;
   elements.prefDefaultFormat.value = state.defaultFormat;
   elements.prefDefaultBitrate.value = state.defaultBitrate;
   elements.bitrateSelect.value = state.defaultBitrate;
@@ -1144,6 +1150,18 @@ function setupEventListeners() {
   });
 
   // Preferences
+  elements.prefShowOverlay.addEventListener("change", async () => {
+    state.showOverlay = elements.prefShowOverlay.checked;
+    await chrome.storage.local.set({ showOverlay: state.showOverlay });
+    showStatus(state.showOverlay ? "Overlay flottant activé" : "Overlay flottant désactivé", "success");
+  });
+
+  elements.prefShowInPage.addEventListener("change", async () => {
+    state.showInPage = elements.prefShowInPage.checked;
+    await chrome.storage.local.set({ showInPage: state.showInPage });
+    showStatus(state.showInPage ? "Bouton intégré activé" : "Bouton intégré désactivé", "success");
+  });
+
   elements.prefDefaultFormat.addEventListener("change", async () => {
     state.defaultFormat = elements.prefDefaultFormat.value;
     await chrome.storage.local.set({ defaultFormat: state.defaultFormat });
