@@ -61,6 +61,14 @@
     });
   }
 
+  // Listen for stream requests from popup
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === "GET_DIRECT_STREAMS") {
+      extractDirectStreams().then((res) => sendResponse(res));
+      return true;
+    }
+  });
+
   function processStreamingData(data) {
     if (!data) return null;
 

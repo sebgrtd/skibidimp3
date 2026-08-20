@@ -503,10 +503,79 @@ async function handleDownload() {
       progress += Math.floor(Math.random() * 8) + 2;
       elements.progressFill.style.width = `${progress}%`;
       if (progress > 50) elements.progressLabel.textContent = isImage ? "Traitement de l'image..." : isVideo ? "Encodage vidéo HD..." : isGif ? "Conversion GIF..." : "Conversion 320kbps...";
-      if (progress > 75) elements.progressLabel.textContent = "Finalisation du fichier...";
-    }
-  }, 400);
+  // --- DIRECT CLIENT-SIDE MP4 DOWNLOAD (Zero VPS - 100% Bypass Bot Walls) ---
+  if (isVideo && (url.includes("youtube.com") || url.includes("youtu.be"))) {
+    let directStream = null;
 
+    // 1. Try from active YouTube tab
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (activeTab && activeTab.id && (activeTab.url?.includes("youtube.com") || activeTab.url?.includes("youtu.be"))) {
+        directStream = await chrome.tabs.sendMessage(activeTab.id, { action: "GET_DIRECT_STREAMS" });
+      }
+    } catch {}
+
+    // 2. Try direct client-side fetch from extension
+    if (!directStream || !directStream.directMp4Url) {
+      try {
+        const videoIdMatch = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        if (videoIdMatch) {
+          const videoId = videoIdMatch[1];
+          const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
+          if (pageRes.ok) {
+            const html = await pageRes.text();
+            const jsonMatch = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
+            if (jsonMatch) {
+              const playerData = JSON.parse(jsonMatch[1]);
+              const formats = playerData.streamingData?.formats || [];
+              const directMp4 = formats.find((f) => f.itag === 22 && f.url) || formats.find((f) => f.itag === 18 && f.url) || formats.find((f) => f.url && f.mimeType?.includes("video/mp4"));
+              if (directMp4 && directMp4.url) {
+                directStream = {
+                  title: playerData.videoDetails?.title || editTitle,
+                  artist: playerData.videoDetails?.author || editArtist,
+                  thumbnail: playerData.videoDetails?.thumbnail?.thumbnails?.pop()?.url || thumbnail,
+                  directMp4Url: directMp4.url,
+                  directMp4Quality: directMp4.qualityLabel || "720p",
+                };
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Client-side YouTube direct fetch error:", err);
+      }
+    }
+
+    // 3. If direct stream resolved client-side, download instantly!
+    if (directStream && directStream.directMp4Url) {
+      clearInterval(interval);
+      elements.progressFill.style.width = "100%";
+      elements.progressLabel.textContent = "Téléchargement direct MP4 HD lancé !";
+
+      const res = await chrome.runtime.sendMessage({
+        action: "DIRECT_CLIENT_DOWNLOAD",
+        streamUrl: directStream.directMp4Url,
+        title: editTitle || directStream.title,
+        artist: editArtist || directStream.artist,
+        format: "mp4",
+        bitrate: directStream.directMp4Quality || "720p",
+        thumbnail: thumbnail || directStream.thumbnail,
+        originalUrl: url,
+      });
+
+      if (res && res.success) {
+        showStatus(`« ${editTitle} » (MP4 HD) téléchargé avec succès !`, "success");
+        elements.downloadBtn.disabled = false;
+        setTimeout(() => {
+          elements.progressContainer.classList.add("hidden");
+          elements.progressFill.style.width = "0%";
+        }, 2000);
+        return;
+      }
+    }
+  }
+
+  // --- STANDARD VPS TRANSCODING FALLBACK ---
   try {
     const headers = { "Content-Type": "application/json" };
     if (state.authToken) {
