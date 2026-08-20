@@ -25,10 +25,10 @@
   loadPrefs();
 
   // -------------------------------------------------------------
-  // 1. Platform & Media Detection (Broad & Resilient)
+  // 1. Platform & Media Detection (Universal & Resilient)
   // -------------------------------------------------------------
   function detectMediaPage() {
-    const hostname = window.location.hostname.toLowerCase();
+    const hostname = (window.location.hostname || "").toLowerCase();
 
     if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) return "youtube";
     if (hostname.includes("spotify.com")) return "spotify";
@@ -251,8 +251,8 @@
         overlay.style.bottom = "auto";
       } catch {}
     } else {
-      overlay.style.right = "24px";
-      overlay.style.bottom = "24px";
+      overlay.style.right = "28px";
+      overlay.style.bottom = "28px";
     }
 
     overlay.innerHTML = `
@@ -419,105 +419,7 @@
   // -------------------------------------------------------------
   // 4. Seamless In-Page UI Injection Across All Platforms
   // -------------------------------------------------------------
-  function injectSeamlessInPageButton() {
-    const existing = document.getElementById("skibidi-action-container");
-    if (!userPrefs.showInPage) {
-      if (existing) existing.remove();
-      return;
-    }
-
-    const platform = detectMediaPage();
-    if (!platform) {
-      if (existing) existing.remove();
-      return;
-    }
-
-    if (existing && existing.classList.contains(`skibidi-inpage-${platform}`)) {
-      return;
-    }
-
-    // Comprehensive platform selectors
-    const platformTargets = {
-      youtube: [
-        "#top-row #actions #top-level-buttons-computed",
-        "#top-row #actions #actions-inner",
-        "#menu #top-level-buttons-computed",
-        "#actions #top-level-buttons-computed",
-        "#owner",
-      ],
-      spotify: [
-        '[data-testid="action-bar-row"]',
-        '[data-testid="track-detail"] [data-testid="action-bar-row"]',
-        '.main-actionBar-ActionBarRow',
-        '[data-testid="now-playing-widget"]',
-        '.Root__now-playing-bar',
-      ],
-      soundcloud: [
-        '.soundActions .sc-button-group',
-        '.listenEngagements .sc-button-group',
-        '.soundTitle__actions',
-        '.sc-button-group',
-      ],
-      tiktok: [
-        '[data-e2e="browse-action-bar"]',
-        '[data-e2e="feed-video-action-bar"]',
-        '[data-e2e="video-author-container"]',
-        'div[class*="ActionBarWrapper"]',
-        'div[class*="VideoActionBar"]',
-        'div[class*="DivActionItemContainer"]',
-        'section:has(video)',
-      ],
-      instagram: [
-        'article section:has(svg)',
-        'article section',
-        'div[role="presentation"] section',
-        'section:has(svg[aria-label])',
-        'div[class*="x78zum5"]:has(svg)',
-      ],
-      twitter: [
-        'article [role="group"]',
-        'div[data-testid="tweet"] [role="group"]',
-        'div[role="group"][id*="id__"]',
-        'div[data-testid="cellInnerDiv"] article [role="group"]',
-      ],
-      pinterest: [
-        '[data-test-id="pin-action-buttons"]',
-        '[data-test-id="PinActionButtons"]',
-        '[data-test-id="closeup-action-bar"]',
-        '[data-test-id="save-button"]',
-        'div[data-test-id*="action"]',
-        'div[data-test-id*="pin"] div:has(button)',
-      ],
-      vimeo: [
-        'aside[aria-label="Actions"]',
-        '[data-testid="video-actions"]',
-        'div[class*="video_actions"]',
-        'div[class*="Header_actions"]',
-        'div[class*="Layout_sidebar"]',
-        'div[class*="clip_info"]',
-        '.clip_info-subline',
-        '#watch-header',
-        '.player_container',
-        'div:has(> video)',
-      ],
-    };
-
-    const selectors = platformTargets[platform] || [];
-    let targetEl = null;
-    for (const selector of selectors) {
-      try {
-        const el = document.querySelector(selector);
-        if (el) {
-          targetEl = el;
-          break;
-        }
-      } catch {}
-    }
-
-    if (!targetEl) return;
-
-    if (existing) existing.remove();
-
+  function createInPageButtonElement(platform) {
     const container = document.createElement("div");
     container.id = "skibidi-action-container";
     container.className = `skibidi-btn-group skibidi-inpage-${platform}`;
@@ -579,6 +481,116 @@
     container.appendChild(dropdownBtn);
     container.appendChild(menu);
 
+    return container;
+  }
+
+  function injectSeamlessInPageButton() {
+    const existing = document.getElementById("skibidi-action-container");
+    if (!userPrefs.showInPage) {
+      if (existing) existing.remove();
+      return;
+    }
+
+    const platform = detectMediaPage();
+    if (!platform) {
+      if (existing) existing.remove();
+      return;
+    }
+
+    if (existing && existing.classList.contains(`skibidi-inpage-${platform}`)) {
+      return;
+    }
+
+    // Extensive platform targets
+    const platformTargets = {
+      youtube: [
+        "#top-row #actions #top-level-buttons-computed",
+        "#top-row #actions #actions-inner",
+        "#menu #top-level-buttons-computed",
+        "#actions #top-level-buttons-computed",
+        "#owner",
+      ],
+      spotify: [
+        '[data-testid="action-bar-row"]',
+        '[data-testid="track-detail"] [data-testid="action-bar-row"]',
+        '.main-actionBar-ActionBarRow',
+        '[data-testid="now-playing-widget"]',
+        '.Root__now-playing-bar',
+      ],
+      soundcloud: [
+        '.soundActions .sc-button-group',
+        '.listenEngagements .sc-button-group',
+        '.soundTitle__actions',
+        '.sc-button-group',
+      ],
+      tiktok: [
+        '[data-e2e="browse-action-bar"]',
+        '[data-e2e="feed-video-action-bar"]',
+        '[data-e2e="video-author-container"]',
+        'div[class*="ActionBarWrapper"]',
+        'div[class*="VideoActionBar"]',
+        'div[class*="DivActionItemContainer"]',
+        'div[class*="DivVideoInfoContainer"]',
+        'section:has(video)',
+      ],
+      instagram: [
+        'article section:has(svg)',
+        'article section',
+        'div[role="presentation"] section',
+        'section:has(svg[aria-label])',
+        'div[class*="x78zum5"]:has(svg)',
+      ],
+      twitter: [
+        'article [role="group"]',
+        'div[data-testid="tweet"] [role="group"]',
+        'div[role="group"][id*="id__"]',
+        'div[data-testid="cellInnerDiv"] article [role="group"]',
+        'div[role="group"]',
+      ],
+      pinterest: [
+        '[data-test-id="pin-action-buttons"]',
+        '[data-test-id="PinActionButtons"]',
+        '[data-test-id="closeup-action-bar"]',
+        '[data-test-id="save-button"]',
+        'div[data-test-id*="action"]',
+        'div[data-test-id*="pin"] div:has(button)',
+      ],
+      vimeo: [
+        'div:has(> button[aria-label*="Partager" i])',
+        'div:has(> button[aria-label*="Share" i])',
+        'div:has(> button[aria-label*="Aimer" i])',
+        'div:has(> button[aria-label*="Like" i])',
+        'aside[aria-label="Actions"]',
+        '[data-testid="video-actions"]',
+        'div[class*="video_actions"]',
+        'div[class*="Header_actions"]',
+        'div[class*="Layout_sidebar"]',
+        'div[class*="clip_info"]',
+        '.clip_info-subline',
+        '#watch-header',
+        '.player_container',
+        'h1 + div + div',
+        'div:has(> video)',
+      ],
+    };
+
+    const selectors = platformTargets[platform] || [];
+    let targetEl = null;
+    for (const selector of selectors) {
+      try {
+        const el = document.querySelector(selector);
+        if (el) {
+          targetEl = el;
+          break;
+        }
+      } catch {}
+    }
+
+    if (!targetEl) return;
+
+    if (existing) existing.remove();
+
+    const container = createInPageButtonElement(platform);
     targetEl.appendChild(container);
   }
 
@@ -719,24 +731,27 @@
     }
   }
 
-  // Watch URL and DOM changes in Single Page Apps (TikTok, Twitter, Vimeo, Pinterest, Spotify, YouTube)
   let lastUrl = window.location.href;
   const urlObserver = new MutationObserver(() => {
     if (window.location.href !== lastUrl) {
       lastUrl = window.location.href;
       setTimeout(checkAndInject, 300);
-      setTimeout(checkAndInject, 1200);
+      setTimeout(checkAndInject, 1000);
     } else {
       checkAndInject();
     }
   });
 
-  if (document.body) {
-    urlObserver.observe(document.body, { childList: true, subtree: true });
-  } else {
-    document.addEventListener("DOMContentLoaded", () => {
+  const setupObserver = () => {
+    if (document.body) {
       urlObserver.observe(document.body, { childList: true, subtree: true });
-    });
+    }
+  };
+
+  if (document.body) {
+    setupObserver();
+  } else {
+    document.addEventListener("DOMContentLoaded", setupObserver);
   }
 
   window.addEventListener("yt-navigate-finish", () => setTimeout(checkAndInject, 500));

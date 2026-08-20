@@ -146,87 +146,139 @@
 /* ========================================================= */
 
 .skibidi-btn-group.skibidi-inpage-spotify {
-  margin: 0 12px;
-  display: inline-flex;
-  align-items: center;
+  margin: 0 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-spotify .skibidi-yt-btn {
-  height: 32px;
-  border-radius: 16px 0 0 16px;
-  font-size: 12px;
+  height: 34px !important;
+  border-radius: 17px 0 0 17px !important;
+  font-size: 12px !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-spotify .skibidi-dropdown-toggle {
-  border-radius: 0 16px 16px 0;
+  border-radius: 0 17px 17px 0 !important;
+  height: 34px !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-soundcloud {
-  margin: 4px 6px;
+  margin: 4px 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-soundcloud .skibidi-yt-btn {
-  height: 26px;
-  border-radius: 13px 0 0 13px;
-  font-size: 11.5px;
-  padding: 0 10px;
+  height: 26px !important;
+  border-radius: 13px 0 0 13px !important;
+  font-size: 11.5px !important;
+  padding: 0 10px !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-soundcloud .skibidi-dropdown-toggle {
-  border-radius: 0 13px 13px 0;
-  padding: 0 6px;
+  border-radius: 0 13px 13px 0 !important;
+  height: 26px !important;
+  padding: 0 6px !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-tiktok {
-  margin: 6px 0;
+  margin: 8px 0 !important;
+  position: relative !important;
+  z-index: 100 !important;
+  display: inline-flex !important;
+  align-items: center !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-tiktok .skibidi-yt-btn {
-  height: 32px;
-  font-size: 12px;
+  height: 36px !important;
+  border-radius: 18px 0 0 18px !important;
+  font-size: 12px !important;
+  padding: 0 12px !important;
+}
+
+.skibidi-btn-group.skibidi-inpage-tiktok .skibidi-dropdown-toggle {
+  height: 36px !important;
+  border-radius: 0 18px 18px 0 !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-instagram {
-  margin: 4px 8px;
+  margin: 4px 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-instagram .skibidi-yt-btn {
-  height: 30px;
-  border-radius: 15px 0 0 15px;
-  font-size: 11.5px;
-  padding: 0 10px;
+  height: 32px !important;
+  border-radius: 16px 0 0 16px !important;
+  font-size: 12px !important;
+  padding: 0 12px !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-instagram .skibidi-dropdown-toggle {
-  border-radius: 0 15px 15px 0;
+  height: 32px !important;
+  border-radius: 0 16px 16px 0 !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-twitter {
-  margin: 0 8px;
+  margin: 0 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 28px !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-twitter .skibidi-yt-btn {
-  height: 28px;
-  border-radius: 14px 0 0 14px;
-  font-size: 11.5px;
-  padding: 0 10px;
+  height: 28px !important;
+  border-radius: 14px 0 0 14px !important;
+  font-size: 11.5px !important;
+  padding: 0 10px !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-twitter .skibidi-dropdown-toggle {
-  border-radius: 0 14px 14px 0;
+  height: 28px !important;
+  border-radius: 0 14px 14px 0 !important;
+  padding: 0 6px !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-pinterest {
-  margin: 0 6px;
+  margin: 0 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 40px !important;
+  vertical-align: middle !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-pinterest .skibidi-yt-btn {
-  height: 36px;
-  border-radius: 18px 0 0 18px;
+  height: 40px !important;
+  border-radius: 20px 0 0 20px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  padding: 0 16px !important;
+}
+
+.skibidi-btn-group.skibidi-inpage-pinterest .skibidi-dropdown-toggle {
+  height: 40px !important;
+  border-radius: 0 20px 20px 0 !important;
+  padding: 0 10px !important;
 }
 
 .skibidi-btn-group.skibidi-inpage-vimeo {
-  margin: 0 8px;
+  margin: 0 10px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 36px !important;
+  vertical-align: middle !important;
+}
+
+.skibidi-btn-group.skibidi-inpage-vimeo .skibidi-yt-btn {
+  height: 36px !important;
+  border-radius: 18px 0 0 18px !important;
+  font-size: 12.5px !important;
+  padding: 0 14px !important;
+}
+
+.skibidi-btn-group.skibidi-inpage-vimeo .skibidi-dropdown-toggle {
+  height: 36px !important;
+  border-radius: 0 18px 18px 0 !important;
 }
 
 /* Floating Toast Notification on Detected Media */
