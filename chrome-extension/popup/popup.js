@@ -174,9 +174,9 @@ function selectMode(mode) {
 
   if (mode === "audio") {
     const audioFormats = [
-      { val: "mp3", label: "MP3 (Haute Qualité)" },
+      { val: "mp3", label: "MP3 (Audio Haute Qualité 320k)" },
       { val: "flac", label: "FLAC (Lossless Studio)" },
-      { val: "wav", label: "WAV (Non compressé)" },
+      { val: "wav", label: "WAV (Studio non compressé)" },
       { val: "m4a", label: "M4A (AAC Apple)" },
     ];
     audioFormats.forEach((f) => {
@@ -192,13 +192,13 @@ function selectMode(mode) {
   } else if (mode === "video") {
     const opt = document.createElement("option");
     opt.value = "mp4";
-    opt.textContent = "MP4 (Vidéo HD 1080p/720p)";
+    opt.textContent = "MP4 (Vidéo HD 1080p / 720p)";
     elements.formatSelect.appendChild(opt);
     elements.boostContainer.style.display = "none";
   } else if (mode === "gif") {
     const opt = document.createElement("option");
     opt.value = "gif";
-    opt.textContent = "GIF (Animation optimisée)";
+    opt.textContent = "GIF (Animation en boucle HD)";
     elements.formatSelect.appendChild(opt);
     elements.boostContainer.style.display = "none";
   } else if (mode === "image") {
@@ -254,16 +254,18 @@ function updatePlatformModes(data) {
   if (!data) return;
 
   const platform = data.platform || "generic";
+  const urlVal = (elements.urlInput.value || "").toLowerCase();
+  const isYouTube = platform === "youtube" || urlVal.includes("youtu");
   const isSpotifyOrSoundcloud = platform === "spotify" || platform === "soundcloud";
   const isPinterest = platform === "pinterest";
   const isTwitter = platform === "twitter";
   const isInstagram = platform === "instagram";
   const isTikTok = platform === "tiktok";
 
-  const hasVideo = Boolean(data.hasVideo);
-  const hasAudio = Boolean(data.hasAudio || isSpotifyOrSoundcloud);
-  const hasImage = Boolean(data.hasImage || isPinterest || isTwitter || (isInstagram && !hasVideo));
-  const isGifAvailable = Boolean(isTwitter || (hasVideo && (data.duration || 0) <= 60));
+  const hasVideo = Boolean(data.hasVideo || isYouTube || isTikTok || isInstagram || platform === "vimeo" || isTwitter);
+  const hasAudio = Boolean(data.hasAudio || isYouTube || isSpotifyOrSoundcloud || isTikTok || isInstagram || isTwitter);
+  const hasImage = Boolean(data.hasImage || isPinterest || isTwitter || isInstagram || isYouTube);
+  const isGifAvailable = Boolean(isTwitter || hasVideo || isYouTube);
 
   // Show/Hide mode buttons
   elements.modeTabAudio.style.display = hasAudio ? "flex" : "none";
@@ -271,8 +273,14 @@ function updatePlatformModes(data) {
   elements.modeTabGif.style.display = isGifAvailable ? "flex" : "none";
   elements.modeTabImage.style.display = hasImage ? "flex" : "none";
 
-  // Auto-select best default mode
-  if (data.mediaType === "image" || (hasImage && !hasVideo)) {
+  // Preserve currently selected mode if valid, otherwise choose best default
+  if (state.selectedMode === "video" && hasVideo) {
+    selectMode("video");
+  } else if (state.selectedMode === "gif" && isGifAvailable) {
+    selectMode("gif");
+  } else if (state.selectedMode === "image" && hasImage) {
+    selectMode("image");
+  } else if (data.mediaType === "image" || (hasImage && !hasVideo)) {
     selectMode("image");
   } else if (hasVideo && (isTikTok || isInstagram || platform === "vimeo")) {
     selectMode("video");
@@ -280,8 +288,6 @@ function updatePlatformModes(data) {
     selectMode("audio");
   } else if (hasVideo) {
     selectMode("video");
-  } else if (hasImage) {
-    selectMode("image");
   } else {
     selectMode("audio");
   }
