@@ -323,16 +323,22 @@ export async function POST(req: NextRequest) {
           outPath
         );
       } else {
-        // Universal MP4 H.264 / AAC conversion with faststart for instant streaming
-        ffmpegArgs.push(
-          "-c:v", "libx264",
-          "-preset", "ultrafast",
-          "-crf", "23",
-          "-c:a", "aac",
-          "-b:a", "192k",
-          "-movflags", "+faststart",
-          outPath
-        );
+        const hasTrimming = (startTime && Number(startTime) > 0) || (endTime && Number(endTime) > 0);
+        if (!hasTrimming && downloadedRaw.endsWith(".mp4")) {
+          // Instant lossless stream copy - 0 CPU & 0 re-encode disk overhead
+          ffmpegArgs.push("-c", "copy", "-movflags", "+faststart", outPath);
+        } else {
+          // Fast H.264 / AAC conversion
+          ffmpegArgs.push(
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "26",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-movflags", "+faststart",
+            outPath
+          );
+        }
       }
 
       await new Promise<void>((resolve, reject) => {
