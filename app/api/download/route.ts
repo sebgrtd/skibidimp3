@@ -153,7 +153,6 @@ export async function POST(req: NextRequest) {
       endTime,
       volumeBoost = "1.0",
       normalize = false,
-      metadata = {},
       editTitle,
       editArtist,
       thumbnail,
@@ -170,12 +169,12 @@ export async function POST(req: NextRequest) {
     const isGifDownload = lowerFormat === "gif";
     const isImageDownload = lowerFormat === "png" || lowerFormat === "jpg" || lowerFormat === "jpeg";
 
-    let metadata = body.metadata || {};
+    const rawMeta = body.metadata || {};
 
     // Consolidate metadata from nested or top-level properties
-    let finalTitle = (metadata.title || editTitle || "").trim();
-    let finalArtist = (metadata.artist || editArtist || "").trim();
-    let finalCoverUrl = (metadata.coverUrl || thumbnail || "").trim();
+    let finalTitle = (rawMeta.title || editTitle || "").trim();
+    let finalArtist = (rawMeta.artist || editArtist || "").trim();
+    let finalCoverUrl = (rawMeta.coverUrl || thumbnail || "").trim();
 
     // If metadata is incomplete for YouTube, fetch fallback from oEmbed
     if ((!finalTitle || finalTitle.toLowerCase() === "audio" || !finalCoverUrl) && (trimmedUrl.includes("youtube.com") || trimmedUrl.includes("youtu.be"))) {
