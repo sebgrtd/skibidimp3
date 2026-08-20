@@ -595,45 +595,25 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // --- VIMEO ---
+    // --- VIMEO (API Officielle oEmbed) ---
     if (platform === "vimeo" || trimmedUrl.includes("vimeo.com")) {
       const idMatch = trimmedUrl.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/[^\/]*\/videos\/|album\/(?:\d+\/)?video\/|video\/|)(\d+)/);
       const vimeoId = idMatch ? idMatch[1] : null;
       const embedUrl = vimeoId ? `https://player.vimeo.com/video/${vimeoId}` : trimmedUrl;
 
       try {
-        const stdout = await runYtDlp([
-          "--dump-json",
-          "--no-warnings",
-          "--referer", "https://vimeo.com/",
-          embedUrl,
-        ]);
-        const data = JSON.parse(stdout);
-        return NextResponse.json({
-          platform: "vimeo",
-          isPlaylist: false,
-          title: data.title || "Vidéo Vimeo",
-          artist: data.uploader || data.channel || "Vimeo",
-          duration: data.duration || 0,
-          thumbnail: data.thumbnail || (data.thumbnails && data.thumbnails[0]?.url) || null,
-          url: embedUrl,
-          originalUrl: trimmedUrl,
-          mediaType: "video",
-          hasVideo: true,
-          hasAudio: true,
-          hasImage: false,
-          availableFormats: ["mp4", "mp3", "wav", "m4a"],
+        const oEmbedRes = await fetch(`https://vimeo.com/api/oembed.json?url=${encodeURIComponent(trimmedUrl)}`, {
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
         });
-      } catch (ytErr) {
-        const vimeoData = await fetchVimeoMedia(trimmedUrl);
-        if (vimeoData) {
+        if (oEmbedRes.ok) {
+          const oData = await oEmbedRes.json();
           return NextResponse.json({
             platform: "vimeo",
             isPlaylist: false,
-            title: vimeoData.title,
-            artist: vimeoData.artist,
-            duration: vimeoData.duration,
-            thumbnail: vimeoData.thumbnail,
+            title: oData.title || "Vidéo Vimeo",
+            artist: oData.author_name || "Vimeo",
+            duration: oData.duration || 0,
+            thumbnail: oData.thumbnail_url || null,
             url: embedUrl,
             originalUrl: trimmedUrl,
             mediaType: "video",
@@ -643,6 +623,28 @@ export async function POST(req: NextRequest) {
             availableFormats: ["mp4", "mp3", "wav", "m4a"],
           });
         }
+      } catch (oErr) {
+        console.warn("Vimeo oEmbed failed:", oErr);
+      }
+
+      // Fallback via custom player parser
+      const vimeoData = await fetchVimeoMedia(trimmedUrl);
+      if (vimeoData) {
+        return NextResponse.json({
+          platform: "vimeo",
+          isPlaylist: false,
+          title: vimeoData.title,
+          artist: vimeoData.artist,
+          duration: vimeoData.duration,
+          thumbnail: vimeoData.thumbnail,
+          url: embedUrl,
+          originalUrl: trimmedUrl,
+          mediaType: "video",
+          hasVideo: true,
+          hasAudio: true,
+          hasImage: false,
+          availableFormats: ["mp4", "mp3", "wav", "m4a"],
+        });
       }
     }
 

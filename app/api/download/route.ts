@@ -59,10 +59,12 @@ async function singleAttemptDownload(
       refererArgs.push("--referer", "https://vimeo.com/");
     }
 
+    const actualCookieArgs = vimeoMatch ? [] : cookieArgs;
+
     const args = [
       ...ytDlpBaseArgs,
       "--remote-components", "ejs:github",
-      ...cookieArgs,
+      ...actualCookieArgs,
       ...refererArgs,
       "--user-agent", userAgent,
       ...formatArg,
