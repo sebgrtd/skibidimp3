@@ -1,4 +1,4 @@
-// SkibidiMP3 - Popup Script (Robust Thumbnail & Clean Filename Support)
+// SkibidiMP3 - Popup Script (Dynamic Platform Formats & Modes)
 
 const DEFAULT_SERVER_URL = "http://localhost:3030";
 
@@ -8,6 +8,7 @@ let state = {
   authUser: null,
   currentMedia: null,
   history: [],
+  selectedMode: "audio", // "audio" | "video" | "gif" | "image"
   defaultFormat: "mp3",
   defaultBitrate: "320k",
   defaultBoost: "0",
@@ -22,6 +23,7 @@ const elements = {
   authStatusDot: document.querySelector("#auth-status-badge .status-dot"),
   authStatusText: document.getElementById("auth-status-text"),
 
+  // Converter Tab
   urlInput: document.getElementById("url-input"),
   fetchInfoBtn: document.getElementById("fetch-info-btn"),
   mediaCard: document.getElementById("media-card"),
@@ -31,11 +33,24 @@ const elements = {
   mediaArtistDisplay: document.getElementById("media-artist-display"),
   mediaPlatformBadge: document.getElementById("media-platform-badge"),
   mediaDurationBadge: document.getElementById("media-duration-badge"),
+
+  // Mode Switcher Tabs
+  mediaModeSelector: document.getElementById("media-mode-selector"),
+  modeTabAudio: document.getElementById("mode-tab-audio"),
+  modeTabVideo: document.getElementById("mode-tab-video"),
+  modeTabGif: document.getElementById("mode-tab-gif"),
+  modeTabImage: document.getElementById("mode-tab-image"),
+  modeTabs: document.querySelectorAll(".mode-tab"),
+
+  // Metadata & Options
   editTitle: document.getElementById("edit-title"),
   editArtist: document.getElementById("edit-artist"),
+  optionsGrid: document.querySelector(".options-grid"),
+  formatContainer: document.getElementById("format-container"),
   formatSelect: document.getElementById("format-select"),
-  bitrateSelect: document.getElementById("bitrate-select"),
   bitrateContainer: document.getElementById("bitrate-container"),
+  bitrateSelect: document.getElementById("bitrate-select"),
+  boostContainer: document.getElementById("boost-container"),
   boostSelect: document.getElementById("boost-select"),
   downloadBtn: document.getElementById("download-btn"),
   progressContainer: document.getElementById("progress-container"),
@@ -43,11 +58,13 @@ const elements = {
   progressLabel: document.getElementById("progress-label"),
   statusMessage: document.getElementById("status-message"),
 
+  // History Tab
   historyList: document.getElementById("history-list"),
   historySearch: document.getElementById("history-search"),
   historyRefreshBtn: document.getElementById("history-refresh-btn"),
   historyClearBtn: document.getElementById("history-clear-btn"),
 
+  // Settings Tab
   serverUrlInput: document.getElementById("server-url-input"),
   saveServerBtn: document.getElementById("save-server-btn"),
   quickServerBtns: document.querySelectorAll(".quick-servers .badge-btn"),
@@ -66,6 +83,7 @@ const elements = {
 document.addEventListener("DOMContentLoaded", async () => {
   setupTabs();
   setupEventListeners();
+  setupModeTabs();
   await loadStoredSettings();
   await checkAuthStatus();
   await detectActiveTabUrl();
@@ -87,16 +105,28 @@ async function loadStoredSettings() {
   elements.serverUrlInput.value = state.serverUrl;
   elements.prefDefaultFormat.value = state.defaultFormat;
   elements.prefDefaultBitrate.value = state.defaultBitrate;
-  elements.formatSelect.value = state.defaultFormat;
   elements.bitrateSelect.value = state.defaultBitrate;
   elements.boostSelect.value = state.defaultBoost;
 
-  updateFormatUI();
+  selectMode("audio");
 }
 
 function cleanServerUrl(url) {
   if (!url) return DEFAULT_SERVER_URL;
   return url.trim().replace(/\/+$/, "");
+}
+
+function cleanYouTubeMediaUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    if (u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be")) {
+      const videoId = u.searchParams.get("v") || (u.hostname.includes("youtu.be") ? u.pathname.replace(/^\//, "").split("/")[0] : null);
+      if (videoId) {
+        return `https://www.youtube.com/watch?v=${videoId}`;
+      }
+    }
+  } catch {}
+  return rawUrl;
 }
 
 // Setup Tab Navigation
@@ -116,6 +146,145 @@ function setupTabs() {
       }
     });
   });
+}
+
+// Setup Mode Switcher (Audio / Video / GIF / Image)
+function setupModeTabs() {
+  elements.modeTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const mode = tab.getAttribute("data-mode");
+      selectMode(mode);
+    });
+  });
+}
+
+function selectMode(mode) {
+  state.selectedMode = mode;
+
+  elements.modeTabs.forEach((t) => {
+    if (t.getAttribute("data-mode") === mode) {
+      t.classList.add("active");
+    } else {
+      t.classList.remove("active");
+    }
+  });
+
+  // Populate format dropdown dynamically
+  elements.formatSelect.innerHTML = "";
+
+  if (mode === "audio") {
+    const audioFormats = [
+      { val: "mp3", label: "MP3 (Haute Qualité)" },
+      { val: "flac", label: "FLAC (Lossless Studio)" },
+      { val: "wav", label: "WAV (Non compressé)" },
+      { val: "m4a", label: "M4A (AAC Apple)" },
+    ];
+    audioFormats.forEach((f) => {
+      const opt = document.createElement("option");
+      opt.value = f.val;
+      opt.textContent = f.label;
+      elements.formatSelect.appendChild(opt);
+    });
+
+    const isPrefAudio = ["mp3", "flac", "wav", "m4a"].includes(state.defaultFormat);
+    elements.formatSelect.value = isPrefAudio ? state.defaultFormat : "mp3";
+    elements.boostContainer.style.display = "flex";
+  } else if (mode === "video") {
+    const opt = document.createElement("option");
+    opt.value = "mp4";
+    opt.textContent = "MP4 (Vidéo HD 1080p/720p)";
+    elements.formatSelect.appendChild(opt);
+    elements.boostContainer.style.display = "none";
+  } else if (mode === "gif") {
+    const opt = document.createElement("option");
+    opt.value = "gif";
+    opt.textContent = "GIF (Animation optimisée)";
+    elements.formatSelect.appendChild(opt);
+    elements.boostContainer.style.display = "none";
+  } else if (mode === "image") {
+    const imgFormats = [
+      { val: "png", label: "PNG (Haute Définition)" },
+      { val: "jpg", label: "JPG (Qualité Standard)" },
+    ];
+    imgFormats.forEach((f) => {
+      const opt = document.createElement("option");
+      opt.value = f.val;
+      opt.textContent = f.label;
+      elements.formatSelect.appendChild(opt);
+    });
+    elements.formatSelect.value = "png";
+    elements.boostContainer.style.display = "none";
+  }
+
+  updateFormatUI();
+}
+
+function updateFormatUI() {
+  const format = elements.formatSelect.value;
+  const mode = state.selectedMode;
+
+  if (mode === "audio") {
+    const showBitrate = format === "mp3" || format === "m4a";
+    elements.bitrateContainer.style.display = showBitrate ? "flex" : "none";
+    elements.optionsGrid.className = showBitrate ? "options-grid" : "options-grid single-col";
+    elements.boostContainer.style.display = "flex";
+
+    const bit = elements.bitrateSelect.value;
+    elements.downloadBtn.querySelector(".btn-text").textContent = `Télécharger en ${format.toUpperCase()} (${bit})`;
+  } else if (mode === "video") {
+    elements.bitrateContainer.style.display = "none";
+    elements.optionsGrid.className = "options-grid single-col";
+    elements.boostContainer.style.display = "none";
+    elements.downloadBtn.querySelector(".btn-text").textContent = "Télécharger la Vidéo (MP4 HD)";
+  } else if (mode === "gif") {
+    elements.bitrateContainer.style.display = "none";
+    elements.optionsGrid.className = "options-grid single-col";
+    elements.boostContainer.style.display = "none";
+    elements.downloadBtn.querySelector(".btn-text").textContent = "Télécharger le GIF Animé";
+  } else if (mode === "image") {
+    elements.bitrateContainer.style.display = "none";
+    elements.optionsGrid.className = "options-grid single-col";
+    elements.boostContainer.style.display = "none";
+    elements.downloadBtn.querySelector(".btn-text").textContent = `Télécharger l'Image (${format.toUpperCase()})`;
+  }
+}
+
+// Adapt modes and formats dynamically based on fetched platform data
+function updatePlatformModes(data) {
+  if (!data) return;
+
+  const platform = data.platform || "generic";
+  const isSpotifyOrSoundcloud = platform === "spotify" || platform === "soundcloud";
+  const isPinterest = platform === "pinterest";
+  const isTwitter = platform === "twitter";
+  const isInstagram = platform === "instagram";
+  const isTikTok = platform === "tiktok";
+
+  const hasVideo = Boolean(data.hasVideo);
+  const hasAudio = Boolean(data.hasAudio || isSpotifyOrSoundcloud);
+  const hasImage = Boolean(data.hasImage || isPinterest || isTwitter || (isInstagram && !hasVideo));
+  const isGifAvailable = Boolean(isTwitter || (hasVideo && (data.duration || 0) <= 60));
+
+  // Show/Hide mode buttons
+  elements.modeTabAudio.style.display = hasAudio ? "flex" : "none";
+  elements.modeTabVideo.style.display = hasVideo ? "flex" : "none";
+  elements.modeTabGif.style.display = isGifAvailable ? "flex" : "none";
+  elements.modeTabImage.style.display = hasImage ? "flex" : "none";
+
+  // Auto-select best default mode
+  if (data.mediaType === "image" || (hasImage && !hasVideo)) {
+    selectMode("image");
+  } else if (hasVideo && (isTikTok || isInstagram || platform === "vimeo")) {
+    selectMode("video");
+  } else if (hasAudio) {
+    selectMode("audio");
+  } else if (hasVideo) {
+    selectMode("video");
+  } else if (hasImage) {
+    selectMode("image");
+  } else {
+    selectMode("audio");
+  }
 }
 
 // Check Authentication Status
@@ -160,19 +329,6 @@ function updateAuthUI(isAuthenticated, username) {
     elements.authLoginBox.classList.remove("hidden");
     elements.authUSerBox.classList.add("hidden");
   }
-}
-
-function cleanYouTubeMediaUrl(rawUrl) {
-  try {
-    const u = new URL(rawUrl);
-    if (u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be")) {
-      const videoId = u.searchParams.get("v") || (u.hostname.includes("youtu.be") ? u.pathname.replace(/^\//, "").split("/")[0] : null);
-      if (videoId) {
-        return `https://www.youtube.com/watch?v=${videoId}`;
-      }
-    }
-  } catch {}
-  return rawUrl;
 }
 
 // Auto-detect YouTube or media URL in active tab
@@ -265,6 +421,9 @@ async function fetchMediaInfo(url) {
     elements.editTitle.value = data.title || "";
     elements.editArtist.value = data.artist || "";
 
+    // Adapt available modes & formats dynamically to platform
+    updatePlatformModes(data);
+
     elements.mediaCard.classList.remove("hidden");
   } catch (err) {
     showStatus(err.message || "Impossible de récupérer les infos de la vidéo.", "error");
@@ -278,23 +437,6 @@ async function fetchMediaInfo(url) {
       </svg>
     `;
   }
-}
-
-// Format changes
-function updateFormatUI() {
-  const format = elements.formatSelect.value;
-  if (format === "mp4" || format === "wav" || format === "flac") {
-    elements.bitrateContainer.style.opacity = "0.35";
-    elements.bitrateContainer.style.pointerEvents = "none";
-  } else {
-    elements.bitrateContainer.style.opacity = "1";
-    elements.bitrateContainer.style.pointerEvents = "auto";
-  }
-  
-  const isVideo = format === "mp4";
-  elements.downloadBtn.querySelector(".btn-text").textContent = isVideo 
-    ? "Télécharger la Vidéo (MP4)" 
-    : `Télécharger en ${format.toUpperCase()}`;
 }
 
 // Clean filename builder helper
@@ -340,7 +482,19 @@ async function handleDownload() {
   elements.downloadBtn.disabled = true;
   elements.progressContainer.classList.remove("hidden");
   elements.progressFill.style.width = "15%";
-  elements.progressLabel.textContent = "Connexion et extraction du média...";
+  
+  const isVideo = format === "mp4";
+  const isImage = format === "png" || format === "jpg";
+  const isGif = format === "gif";
+
+  elements.progressLabel.textContent = isImage 
+    ? "Récupération de l'image HD..." 
+    : isVideo 
+      ? "Extraction du flux vidéo..." 
+      : isGif 
+        ? "Génération du GIF..." 
+        : "Connexion et extraction audio...";
+        
   hideStatus();
 
   let progress = 15;
@@ -348,7 +502,7 @@ async function handleDownload() {
     if (progress < 85) {
       progress += Math.floor(Math.random() * 8) + 2;
       elements.progressFill.style.width = `${progress}%`;
-      if (progress > 50) elements.progressLabel.textContent = "Conversion & encodage haute fidélité...";
+      if (progress > 50) elements.progressLabel.textContent = isImage ? "Traitement de l'image..." : isVideo ? "Encodage vidéo HD..." : isGif ? "Conversion GIF..." : "Conversion 320kbps...";
       if (progress > 75) elements.progressLabel.textContent = "Finalisation du fichier...";
     }
   }, 400);
@@ -362,7 +516,7 @@ async function handleDownload() {
     const payload = {
       url: state.currentMedia?.originalUrl || state.currentMedia?.url || url,
       format,
-      bitrate,
+      bitrate: isVideo ? "1080p" : isImage ? "HD" : bitrate,
       boost,
       editTitle,
       editArtist,
@@ -420,7 +574,7 @@ async function handleDownload() {
             artist: editArtist,
             thumbnail: state.currentMedia?.thumbnail,
             format,
-            bitrate: format === "mp4" ? "1080p" : bitrate,
+            bitrate: isVideo ? "1080p" : isImage ? "HD" : bitrate,
             url: state.currentMedia?.originalUrl || state.currentMedia?.url || url,
           }),
         });
@@ -592,6 +746,7 @@ function setupEventListeners() {
   });
 
   elements.formatSelect.addEventListener("change", updateFormatUI);
+  elements.bitrateSelect.addEventListener("change", updateFormatUI);
   elements.downloadBtn.addEventListener("click", handleDownload);
 
   // History
@@ -673,14 +828,11 @@ function setupEventListeners() {
   // Preferences
   elements.prefDefaultFormat.addEventListener("change", async () => {
     state.defaultFormat = elements.prefDefaultFormat.value;
-    elements.formatSelect.value = state.defaultFormat;
-    updateFormatUI();
     await chrome.storage.local.set({ defaultFormat: state.defaultFormat });
   });
 
   elements.prefDefaultBitrate.addEventListener("change", async () => {
     state.defaultBitrate = elements.prefDefaultBitrate.value;
-    elements.bitrateSelect.value = state.defaultBitrate;
     await chrome.storage.local.set({ defaultBitrate: state.defaultBitrate });
   });
 }
