@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { 
   Download, 
   History, 
@@ -10,7 +10,11 @@ import {
   RotateCw, 
   Loader2, 
   Music,
-  FolderArchive
+  FolderArchive,
+  Search,
+  SlidersHorizontal,
+  ArrowUpDown,
+  X
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -41,11 +45,44 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
   const [downloadingSingleId, setDownloadingSingleId] = useState<string | null>(null);
   const [singleProgress, setSingleProgress] = useState<{ [id: string]: { percent: number; status: string } }>({});
   
+  // Search, Filter & Sort states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [formatFilter, setFormatFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("date_desc");
+
   // Modals state
   const [deleteSingleItem, setDeleteSingleItem] = useState<SyncedHistoryItem | null>(null);
   const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Filtered & Sorted History
+  const filteredAndSortedHistory = useMemo(() => {
+    let result = history.filter((item) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        (item.title && item.title.toLowerCase().includes(q)) ||
+        (item.artist && item.artist.toLowerCase().includes(q)) ||
+        (item.url && item.url.toLowerCase().includes(q));
+
+      const matchFormat =
+        formatFilter === "all" ||
+        (item.format && item.format.toLowerCase() === formatFilter.toLowerCase());
+
+      return matchSearch && matchFormat;
+    });
+
+    result.sort((a, b) => {
+      if (sortBy === "title_asc") return (a.title || "").localeCompare(b.title || "");
+      if (sortBy === "title_desc") return (b.title || "").localeCompare(a.title || "");
+      if (sortBy === "artist_asc") return (a.artist || "").localeCompare(b.artist || "");
+      if (sortBy === "date_asc") return (a.id || "").localeCompare(b.id || "");
+      return (b.id || "").localeCompare(a.id || ""); // default date_desc
+    });
+
+    return result;
+  }, [history, searchQuery, formatFilter, sortBy]);
 
   const toggleSelect = (id: string) => {
     if (selectedIds.includes(id)) {
@@ -56,10 +93,14 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === history.length) {
-      setSelectedIds([]);
+    const visibleIds = filteredAndSortedHistory.map((h) => h.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+
+    if (allVisibleSelected) {
+      setSelectedIds(selectedIds.filter((id) => !visibleIds.includes(id)));
     } else {
-      setSelectedIds(history.map((h) => h.id));
+      const newSelected = Array.from(new Set([...selectedIds, ...visibleIds]));
+      setSelectedIds(newSelected);
     }
   };
 
@@ -426,12 +467,72 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
 
       {/* History Items List */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 shadow-xl overflow-hidden">
-        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
-            <History className="h-4 w-4 text-indigo-400" />
-            <span>Historique des Téléchargements</span>
-          </h3>
-          <span className="text-xs text-zinc-500">{history.length} morceau(x)</span>
+        <div className="p-4 border-b border-zinc-800 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+              <History className="h-4 w-4 text-indigo-400" />
+              <span>Historique des Téléchargements</span>
+            </h3>
+            <div className="flex items-center gap-2 text-xs text-zinc-400">
+              <span>{filteredAndSortedHistory.length} / {history.length} morceau(x)</span>
+            </div>
+          </div>
+
+          {/* Search, Filter & Sort Toolbar */}
+          {history.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-1">
+              {/* Search Bar */}
+              <div className="sm:col-span-6 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Rechercher par titre, artiste..."
+                  className="w-full pl-9 pr-8 py-1.5 rounded-xl border border-zinc-800 bg-zinc-950 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Format Filter */}
+              <div className="sm:col-span-3">
+                <select
+                  value={formatFilter}
+                  onChange={(e) => setFormatFilter(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-xl border border-zinc-800 bg-zinc-950 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer"
+                >
+                  <option value="all">Tous les formats</option>
+                  <option value="mp3">MP3 uniquement</option>
+                  <option value="mp4">MP4 (Vidéo)</option>
+                  <option value="flac">FLAC (Lossless)</option>
+                  <option value="wav">WAV</option>
+                  <option value="m4a">M4A</option>
+                </select>
+              </div>
+
+              {/* Sort By */}
+              <div className="sm:col-span-3">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-xl border border-zinc-800 bg-zinc-950 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer"
+                >
+                  <option value="date_desc">Plus récents d'abord</option>
+                  <option value="date_asc">Plus anciens d'abord</option>
+                  <option value="title_asc">Titre (A → Z)</option>
+                  <option value="title_desc">Titre (Z → A)</option>
+                  <option value="artist_asc">Artiste (A → Z)</option>
+                </select>
+              </div>
+            </div>
+          )}
         </div>
 
         {history.length === 0 ? (
@@ -442,9 +543,24 @@ export default function UserDashboard({ user, history, onRefreshHistory }: UserD
               Collez un lien ci-dessus pour convertir votre première musique. Elle sera sauvegardée dans votre compte !
             </p>
           </div>
+        ) : filteredAndSortedHistory.length === 0 ? (
+          <div className="p-10 text-center space-y-2.5">
+            <Search className="h-8 w-8 text-zinc-600 mx-auto" />
+            <h4 className="text-xs font-semibold text-zinc-300">Aucun résultat correspondant</h4>
+            <p className="text-[11px] text-zinc-500">Essayez de modifier votre recherche ou vos filtres.</p>
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setFormatFilter("all");
+              }}
+              className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 underline"
+            >
+              Réinitialiser les filtres
+            </button>
+          </div>
         ) : (
           <div className="divide-y divide-zinc-800/60 max-h-96 overflow-y-auto">
-            {history.map((item) => {
+            {filteredAndSortedHistory.map((item) => {
               const isSelected = selectedIds.includes(item.id);
               const isDownloadingThis = downloadingSingleId === item.id;
               const progress = singleProgress[item.id];

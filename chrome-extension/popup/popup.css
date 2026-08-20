@@ -1,22 +1,20 @@
-/* SkibidiMP3 - Popup Stylesheet */
+/* SkibidiMP3 - Extension Popup Stylesheet (Dark Minimalist Theme) */
 
 :root {
-  --bg-main: #0b0c10;
-  --bg-card: rgba(26, 28, 38, 0.75);
-  --bg-card-hover: rgba(38, 41, 56, 0.85);
-  --bg-input: #12141d;
-  --border: rgba(255, 255, 255, 0.09);
-  --border-focus: #8b5cf6;
-  --text-main: #f3f4f6;
-  --text-muted: #9ca3af;
-  --primary-gradient: linear-gradient(135deg, #8b5cf6 0%, #d946ef 50%, #06b6d4 100%);
-  --accent: #8b5cf6;
-  --accent-cyan: #06b6d4;
+  --bg-main: #09090b;
+  --bg-card: #18181b;
+  --bg-card-hover: #27272a;
+  --bg-input: #09090b;
+  --border: #27272a;
+  --border-focus: #6366f1;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --text-main: #f4f4f5;
+  --text-muted: #a1a1aa;
   --danger: #ef4444;
   --success: #10b981;
   --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 16px;
 }
 
 * {
@@ -60,25 +58,24 @@ body {
 .logo-icon {
   width: 32px;
   height: 32px;
-  background: var(--primary-gradient);
+  background: var(--primary);
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
 }
 
 .brand-text h1 {
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: #ffffff;
 }
 
 .brand-text h1 span {
-  background: var(--primary-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #818cf8;
 }
 
 .brand-text .subtitle {
@@ -93,37 +90,37 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px 10px;
   border-radius: 20px;
   border: 1px solid var(--border);
   font-size: 11px;
+  color: var(--text-muted);
 }
 
 .status-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
 }
 
 .status-dot.connected {
   background-color: var(--success);
-  box-shadow: 0 0 8px var(--success);
+  box-shadow: 0 0 6px var(--success);
 }
 
 .status-dot.disconnected {
   background-color: var(--danger);
-  box-shadow: 0 0 6px var(--danger);
 }
 
 /* Nav Tabs */
 .nav-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 4px;
-  border-radius: var(--radius-md);
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 3px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
 }
 
@@ -132,15 +129,15 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 4px;
+  padding: 7px 4px;
   background: transparent;
   border: none;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 .nav-tab:hover {
@@ -150,8 +147,8 @@ body {
 .nav-tab.active {
   background: var(--bg-card);
   color: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   border: 1px solid var(--border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* Tab Panes */
@@ -179,9 +176,9 @@ select {
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 9px 12px;
+  padding: 8px 12px;
   color: var(--text-main);
-  font-size: 13px;
+  font-size: 12px;
   outline: none;
   transition: border-color 0.2s ease;
 }
@@ -189,25 +186,24 @@ select {
 input:focus,
 select:focus {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
 }
 
 .btn-icon {
-  background: var(--bg-input);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  color: var(--text-main);
+  color: var(--text-muted);
   padding: 8px 10px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 .btn-icon:hover {
-  border-color: var(--accent);
-  background: var(--bg-card-hover);
+  border-color: var(--border-focus);
+  color: var(--text-main);
 }
 
 .btn-icon.danger:hover {
@@ -232,13 +228,32 @@ select:focus {
   align-items: center;
 }
 
-.media-thumb {
-  width: 72px;
-  height: 52px;
+.thumb-container {
+  width: 68px;
+  height: 50px;
   border-radius: 6px;
-  object-fit: cover;
   background: #000;
   border: 1px solid var(--border);
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.media-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumb-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: #121215;
 }
 
 .media-details {
@@ -247,7 +262,7 @@ select:focus {
 }
 
 .media-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-main);
   white-space: nowrap;
@@ -267,21 +282,23 @@ select:focus {
 .media-badges {
   display: flex;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 5px;
 }
 
 .badge {
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 9px;
+  font-weight: 600;
   text-transform: uppercase;
   padding: 2px 6px;
   border-radius: 4px;
-  background: rgba(139, 92, 246, 0.2);
-  color: #c084fc;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #a5b4fc;
 }
 
 .badge-dim {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
   color: var(--text-muted);
 }
 
@@ -296,6 +313,9 @@ select:focus {
   color: var(--text-muted);
   cursor: pointer;
   outline: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .metadata-accordion summary:hover {
@@ -336,31 +356,28 @@ select:focus {
 
 /* Primary Button */
 .btn-primary {
-  background: var(--primary-gradient);
-  background-size: 200% 200%;
-  animation: gradient-shift 4s ease infinite;
+  background: var(--primary);
   color: #ffffff;
   border: none;
   border-radius: var(--radius-sm);
-  padding: 12px;
-  font-size: 13px;
-  font-weight: 700;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35);
-  transition: all 0.2s ease;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+  transition: all 0.15s ease;
 }
 
 .btn-primary:hover {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
+  background: var(--primary-hover);
 }
 
 .btn-primary:active {
-  transform: translateY(0);
+  transform: scale(0.99);
 }
 
 .btn-primary:disabled {
@@ -375,7 +392,7 @@ select:focus {
   color: var(--text-main);
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -383,7 +400,7 @@ select:focus {
 
 .btn-secondary:hover {
   background: var(--bg-card-hover);
-  border-color: var(--accent);
+  border-color: var(--border-focus);
 }
 
 /* Progress */
@@ -395,21 +412,21 @@ select:focus {
 
 .progress-bar {
   width: 100%;
-  height: 6px;
+  height: 4px;
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
+  border-radius: 2px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
   width: 0%;
-  background: var(--primary-gradient);
+  background: var(--primary);
   transition: width 0.3s ease;
 }
 
 .progress-label {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
   text-align: center;
 }
@@ -418,21 +435,21 @@ select:focus {
 .status-message {
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: 11px;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .status-message.success {
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
   color: #34d399;
 }
 
 .status-message.error {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
   color: #f87171;
 }
 
@@ -446,7 +463,7 @@ select:focus {
 .history-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   max-height: 380px;
   overflow-y: auto;
   padding-right: 2px;
@@ -457,32 +474,40 @@ select:focus {
 }
 
 .history-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 2px;
 }
 
 .history-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  transition: all 0.2s ease;
+  padding: 7px 9px;
+  transition: all 0.15s ease;
 }
 
 .history-item:hover {
   background: var(--bg-card-hover);
-  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.history-thumb-box {
+  width: 42px;
+  height: 30px;
+  border-radius: 4px;
+  background: #000;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+  border: 1px solid var(--border);
 }
 
 .history-thumb {
-  width: 44px;
-  height: 32px;
-  border-radius: 4px;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  background: #000;
 }
 
 .history-info {
@@ -491,7 +516,7 @@ select:focus {
 }
 
 .history-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-main);
   white-space: nowrap;
@@ -503,27 +528,30 @@ select:focus {
   font-size: 10px;
   color: var(--text-muted);
   display: flex;
-  gap: 6px;
+  gap: 5px;
   margin-top: 2px;
 }
 
 .history-actions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
 }
 
 .btn-item-action {
   background: transparent;
   border: none;
   color: var(--text-muted);
-  padding: 4px;
+  padding: 5px;
   cursor: pointer;
   border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-item-action:hover {
   color: var(--text-main);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .btn-item-action.danger:hover {
@@ -534,11 +562,11 @@ select:focus {
   text-align: center;
   padding: 30px 10px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 /* Settings */
@@ -553,11 +581,11 @@ select:focus {
 }
 
 .settings-section h3 {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--accent-cyan);
+  color: #818cf8;
 }
 
 .settings-section label {
@@ -579,7 +607,7 @@ select:focus {
 .badge-btn {
   font-size: 10px;
   padding: 3px 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border);
   color: var(--text-muted);
   border-radius: 12px;
@@ -587,7 +615,7 @@ select:focus {
 }
 
 .badge-btn:hover {
-  border-color: var(--accent);
+  border-color: var(--border-focus);
   color: var(--text-main);
 }
 
@@ -604,14 +632,15 @@ select:focus {
 }
 
 .user-avatar {
-  width: 36px;
-  height: 36px;
-  background: rgba(139, 92, 246, 0.2);
+  width: 32px;
+  height: 32px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  color: #818cf8;
 }
 
 .user-info {
@@ -619,20 +648,20 @@ select:focus {
 }
 
 .user-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .user-status-text {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--success);
 }
 
 .btn-danger-sm {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
   color: #f87171;
-  padding: 6px 10px;
+  padding: 5px 9px;
   border-radius: var(--radius-sm);
   font-size: 11px;
   font-weight: 600;
@@ -640,15 +669,9 @@ select:focus {
 }
 
 .btn-danger-sm:hover {
-  background: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.2);
 }
 
 .hidden {
   display: none !important;
-}
-
-@keyframes gradient-shift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
 }

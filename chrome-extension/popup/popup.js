@@ -1,4 +1,4 @@
-// SkibidiMP3 - Popup Script
+// SkibidiMP3 - Popup Script (Refined Minimalist UI)
 
 const DEFAULT_SERVER_URL = "http://localhost:3030";
 
@@ -29,6 +29,7 @@ const elements = {
   fetchInfoBtn: document.getElementById("fetch-info-btn"),
   mediaCard: document.getElementById("media-card"),
   mediaThumb: document.getElementById("media-thumb"),
+  mediaThumbFallback: document.getElementById("media-thumb-fallback"),
   mediaTitleDisplay: document.getElementById("media-title-display"),
   mediaArtistDisplay: document.getElementById("media-artist-display"),
   mediaPlatformBadge: document.getElementById("media-platform-badge"),
@@ -70,10 +71,24 @@ const elements = {
 document.addEventListener("DOMContentLoaded", async () => {
   setupTabs();
   setupEventListeners();
+  setupThumbnailErrorFallback();
   await loadStoredSettings();
   await checkAuthStatus();
   await detectActiveTabUrl();
 });
+
+function setupThumbnailErrorFallback() {
+  if (elements.mediaThumb) {
+    elements.mediaThumb.addEventListener("error", () => {
+      elements.mediaThumb.style.display = "none";
+      if (elements.mediaThumbFallback) elements.mediaThumbFallback.classList.remove("hidden");
+    });
+    elements.mediaThumb.addEventListener("load", () => {
+      elements.mediaThumb.style.display = "block";
+      if (elements.mediaThumbFallback) elements.mediaThumbFallback.classList.add("hidden");
+    });
+  }
+}
 
 // Load settings from chrome.storage
 async function loadStoredSettings() {
@@ -148,7 +163,6 @@ async function checkAuthStatus() {
     console.warn("Auth check failed:", err);
   }
 
-  // If token is invalid
   updateAuthUI(false, null);
 }
 
@@ -223,7 +237,15 @@ async function fetchMediaInfo(url) {
     state.currentMedia = data;
 
     // Populate UI
-    elements.mediaThumb.src = data.thumbnail || "icons/icon128.png";
+    if (data.thumbnail) {
+      elements.mediaThumb.style.display = "block";
+      if (elements.mediaThumbFallback) elements.mediaThumbFallback.classList.add("hidden");
+      elements.mediaThumb.src = data.thumbnail;
+    } else {
+      elements.mediaThumb.style.display = "none";
+      if (elements.mediaThumbFallback) elements.mediaThumbFallback.classList.remove("hidden");
+    }
+
     elements.mediaTitleDisplay.textContent = data.title || "Titre inconnu";
     elements.mediaArtistDisplay.textContent = data.artist || "Artiste inconnu";
     elements.mediaPlatformBadge.textContent = (data.platform || "Média").toUpperCase();
@@ -242,7 +264,7 @@ async function fetchMediaInfo(url) {
   } finally {
     elements.fetchInfoBtn.disabled = false;
     elements.fetchInfoBtn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8"></circle>
         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
       </svg>
@@ -250,11 +272,11 @@ async function fetchMediaInfo(url) {
   }
 }
 
-// Format changes (hide bitrate for video/lossless)
+// Format changes
 function updateFormatUI() {
   const format = elements.formatSelect.value;
   if (format === "mp4" || format === "wav" || format === "flac") {
-    elements.bitrateContainer.style.opacity = "0.4";
+    elements.bitrateContainer.style.opacity = "0.35";
     elements.bitrateContainer.style.pointerEvents = "none";
   } else {
     elements.bitrateContainer.style.opacity = "1";
@@ -263,8 +285,8 @@ function updateFormatUI() {
   
   const isVideo = format === "mp4";
   elements.downloadBtn.querySelector(".btn-text").textContent = isVideo 
-    ? "⚡ Télécharger la Vidéo (MP4)" 
-    : `⚡ Télécharger en ${format.toUpperCase()}`;
+    ? "Télécharger la Vidéo (MP4)" 
+    : `Télécharger en ${format.toUpperCase()}`;
 }
 
 // Download Handler
@@ -288,13 +310,12 @@ async function handleDownload() {
   elements.progressLabel.textContent = "Connexion et extraction du média...";
   hideStatus();
 
-  // Progress simulation
   let progress = 15;
   const interval = setInterval(() => {
     if (progress < 85) {
       progress += Math.floor(Math.random() * 8) + 2;
       elements.progressFill.style.width = `${progress}%`;
-      if (progress > 50) elements.progressLabel.textContent = "Conversion & encodage de haute qualité...";
+      if (progress > 50) elements.progressLabel.textContent = "Conversion & encodage haute fidélité...";
       if (progress > 75) elements.progressLabel.textContent = "Finalisation du fichier...";
     }
   }, 400);
@@ -328,7 +349,7 @@ async function handleDownload() {
 
     clearInterval(interval);
     elements.progressFill.style.width = "100%";
-    elements.progressLabel.textContent = "Fichier prêt ! Démarrage du téléchargement...";
+    elements.progressLabel.textContent = "Fichier prêt ! Téléchargement en cours...";
 
     const blob = await res.blob();
     const reader = new FileReader();
@@ -344,7 +365,6 @@ async function handleDownload() {
     const filename = cleanArtist ? `${cleanArtist} - ${cleanTitle}.${format}` : `${cleanTitle}.${format}`;
     const safeFilename = filename.replace(/[\\/:*?"<>|]/g, "_");
 
-    // Trigger Chrome native download
     await chrome.downloads.download({
       url: dataUrl,
       filename: safeFilename,
@@ -437,7 +457,9 @@ function renderHistoryList(items) {
     const el = document.createElement("div");
     el.className = "history-item";
     el.innerHTML = `
-      <img src="${item.thumbnail || 'icons/icon48.png'}" class="history-thumb" alt="">
+      <div class="history-thumb-box">
+        <img src="${item.thumbnail || ''}" class="history-thumb" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'">
+      </div>
       <div class="history-info">
         <div class="history-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
         <div class="history-meta">
@@ -450,23 +472,20 @@ function renderHistoryList(items) {
       </div>
       <div class="history-actions">
         <button class="btn-item-action download-again-btn" title="Re-télécharger">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
         </button>
         <button class="btn-item-action danger delete-record-btn" title="Supprimer de l'historique">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
     `;
 
-    // Download again
     el.querySelector(".download-again-btn").addEventListener("click", () => {
       elements.urlInput.value = item.url;
-      // Switch to converter tab
       elements.navTabs[0].click();
       fetchMediaInfo(item.url);
     });
 
-    // Delete record
     el.querySelector(".delete-record-btn").addEventListener("click", async () => {
       await deleteHistoryItem(item.id);
     });
@@ -478,7 +497,9 @@ function renderHistoryList(items) {
 function renderHistoryPlaceholder(text) {
   elements.historyList.innerHTML = `
     <div class="empty-state">
-      <div style="font-size: 24px;">📂</div>
+      <div style="color: var(--text-muted);">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10"></path><path d="M6 10h10"></path></svg>
+      </div>
       <div>${text}</div>
     </div>
   `;

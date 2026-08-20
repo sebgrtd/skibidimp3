@@ -1,7 +1,8 @@
-// SkibidiMP3 - YouTube Content Script (Client-Side Direct + VPS Converter)
+// SkibidiMP3 - YouTube Content Script (Refined DA & Proactive Media Detection)
 
 (() => {
   let isConverting = false;
+  let lastNotifiedUrl = "";
 
   // Injected helper to extract ytInitialPlayerResponse from page context
   function extractDirectStreams() {
@@ -54,7 +55,6 @@
       window.addEventListener(eventId, handler);
       (document.head || document.documentElement).appendChild(script);
 
-      // Timeout fallback
       setTimeout(() => {
         window.removeEventListener(eventId, handler);
         resolve(null);
@@ -71,7 +71,7 @@
     const formats = data.streamingData.formats || [];
     const adaptiveFormats = data.streamingData.adaptiveFormats || [];
 
-    // Find best direct progressive MP4 (audio + video muxed)
+    // Find best direct progressive MP4
     let directMp4 = formats.find(f => f.itag === 22 && f.url); // 720p
     if (!directMp4) directMp4 = formats.find(f => f.itag === 18 && f.url); // 360p
     if (!directMp4) directMp4 = formats.find(f => f.url && f.mimeType && f.mimeType.includes("video/mp4"));
@@ -102,20 +102,16 @@
     mainBtn.id = "skibidi-quick-download-btn";
     mainBtn.className = "skibidi-yt-btn";
     mainBtn.innerHTML = `
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-      </svg>
-      <span>⚡ MP3 Boosté</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+      <span>MP3 Boosté</span>
     `;
 
-    // Dropdown toggle for Direct Video / Direct Audio
+    // Dropdown toggle
     const dropdownBtn = document.createElement("button");
     dropdownBtn.className = "skibidi-yt-btn skibidi-dropdown-toggle";
-    dropdownBtn.title = "Options de téléchargement (Direct Client & Vidéo)";
+    dropdownBtn.title = "Options de téléchargement";
     dropdownBtn.innerHTML = `
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <polyline points="6 9 12 15 18 9"></polyline>
-      </svg>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
     `;
 
     // Dropdown menu
@@ -124,29 +120,34 @@
     menu.innerHTML = `
       <div class="skibidi-menu-header">Options SkibidiMP3</div>
       <button class="skibidi-menu-item" data-action="vps-mp3">
-        <span class="menu-icon">⚡</span>
+        <div class="menu-icon">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        </div>
         <div class="menu-text">
           <strong>MP3 320k Boosté</strong>
-          <small>Conversion HQ serveur + ID3 Tags</small>
+          <small>Conversion serveur + Tags ID3</small>
         </div>
       </button>
       <button class="skibidi-menu-item" data-action="client-mp4">
-        <span class="menu-icon">📹</span>
+        <div class="menu-icon">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2"></rect></svg>
+        </div>
         <div class="menu-text">
           <strong>MP4 Direct (Client)</strong>
-          <small>Téléchargement instantané sans VPS</small>
+          <small>Téléchargement direct sans VPS</small>
         </div>
       </button>
       <button class="skibidi-menu-item" data-action="client-audio">
-        <span class="menu-icon">🎵</span>
+        <div class="menu-icon">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+        </div>
         <div class="menu-text">
-          <strong>Audio Direct M4A (Client)</strong>
+          <strong>Audio Direct M4A</strong>
           <small>Flux audio natif haute vitesse</small>
         </div>
       </button>
     `;
 
-    // Toggle dropdown
     dropdownBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -159,14 +160,12 @@
       }
     });
 
-    // Main button action: Quick MP3
     mainBtn.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
       await triggerDownload("vps-mp3", mainBtn);
     });
 
-    // Menu actions
     menu.querySelectorAll(".skibidi-menu-item").forEach((item) => {
       item.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -184,6 +183,54 @@
     return container;
   }
 
+  // Floating Toast on media detection
+  function showDetectionToast() {
+    const currentUrl = window.location.href;
+    if (lastNotifiedUrl === currentUrl) return;
+    lastNotifiedUrl = currentUrl;
+
+    const existing = document.getElementById("skibidi-floating-toast");
+    if (existing) existing.remove();
+
+    const toast = document.createElement("div");
+    toast.id = "skibidi-floating-toast";
+    toast.className = "skibidi-floating-toast";
+    toast.innerHTML = `
+      <div class="skibidi-toast-badge">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+      </div>
+      <div class="skibidi-toast-content">
+        <span class="skibidi-toast-title">Média détecté</span>
+        <span class="skibidi-toast-desc">Disponible en MP3 ou MP4 direct</span>
+      </div>
+      <div class="skibidi-toast-actions">
+        <button id="skibidi-toast-dl-btn" class="skibidi-toast-btn">Télécharger</button>
+        <button id="skibidi-toast-close-btn" class="skibidi-toast-close" title="Fermer">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+    `;
+
+    toast.querySelector("#skibidi-toast-dl-btn").addEventListener("click", () => {
+      toast.remove();
+      const mainBtn = document.getElementById("skibidi-quick-download-btn");
+      if (mainBtn) triggerDownload("vps-mp3", mainBtn);
+    });
+
+    toast.querySelector("#skibidi-toast-close-btn").addEventListener("click", () => {
+      toast.remove();
+    });
+
+    document.body.appendChild(toast);
+
+    // Auto-remove after 6s
+    setTimeout(() => {
+      if (document.getElementById("skibidi-floating-toast") === toast) {
+        toast.remove();
+      }
+    }, 6000);
+  }
+
   async function triggerDownload(mode, btnEl) {
     if (isConverting) return;
 
@@ -198,7 +245,6 @@
     btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Préparation...</span>`;
 
     try {
-      // If client-side direct download requested
       if (mode === "client-mp4" || mode === "client-audio") {
         btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Flux direct...</span>`;
         const streams = await extractDirectStreams();
@@ -236,12 +282,8 @@
           showSuccess(btnEl);
           return;
         }
-
-        // If direct streams weren't found on client, seamlessly fallback to VPS
-        console.log("Direct stream not found in DOM, falling back to server...");
       }
 
-      // VPS Standard / Advanced Mode (MP3 320k or fallback)
       btnEl.innerHTML = `<div class="skibidi-yt-spinner"></div><span>Conversion...</span>`;
       const response = await chrome.runtime.sendMessage({
         action: "QUICK_DOWNLOAD_FROM_PAGE",
@@ -261,10 +303,8 @@
         isConverting = false;
         btnEl.className = "skibidi-yt-btn";
         btnEl.innerHTML = `
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-          </svg>
-          <span>⚡ MP3 Boosté</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          <span>MP3 Boosté</span>
         `;
       }, 3500);
     }
@@ -273,9 +313,7 @@
   function showSuccess(btnEl) {
     btnEl.className = "skibidi-yt-btn skibidi-success";
     btnEl.innerHTML = `
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="20 6 9 17 4 12"></polyline>
-      </svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
       <span>Téléchargé !</span>
     `;
   }
@@ -283,11 +321,7 @@
   function showError(btnEl, message) {
     btnEl.className = "skibidi-yt-btn skibidi-error";
     btnEl.innerHTML = `
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="15" y1="9" x2="9" y2="15"></line>
-        <line x1="9" y1="9" x2="15" y2="15"></line>
-      </svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
       <span>Échec</span>
     `;
     console.error("SkibidiMP3 error:", message);
@@ -299,7 +333,7 @@
     }
 
     if (document.getElementById("skibidi-action-container")) {
-      return; // Already injected
+      return;
     }
 
     const targets = [
@@ -322,6 +356,7 @@
     if (targetEl) {
       const container = createActionContainer();
       targetEl.appendChild(container);
+      showDetectionToast();
     }
   }
 
